@@ -15,8 +15,8 @@ class ForwardKinematicsLayer(torch.nn.Module):
         self.b_idxs = None
 
         if parents is None and positions is None:
-            parents_json = "/orion/u/jiamanli/github/hm-vae/utils/data/joint24_parents.json"
-            pos_npy = "/orion/u/jiamanli/github/hm-vae/utils/data/skeleton_offsets.npy"
+            parents_json = "utils/data/joint24_parents.json"
+            pos_npy = "utils/data/skeleton_offsets.npy"
            
             ori_parents_list = json.load(open(parents_json, 'r'))
             self.parents = []
