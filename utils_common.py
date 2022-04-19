@@ -26,9 +26,9 @@ import tqdm
 import cv2
 import math
 import time
-import torch
-
+import matplotlib
 from matplotlib import pyplot as plt
+matplotlib.use('Agg')
 from mpl_toolkits.mplot3d import axes3d, Axes3D
 
 from matplotlib.animation import FuncAnimation
@@ -282,12 +282,12 @@ def show3Dpose_animation(channels, image_directory, iterations, tag, bs_idx, use
         os.makedirs(dest_folder)
 
     if dest_vis_path is None:
-        dest_gif_path = os.path.join(dest_folder, str(bs_idx)+".mp4")      
+        dest_gif_path = os.path.join(dest_folder, str(bs_idx)+".gif")      
     else:
         dest_gif_path = dest_vis_path 
 
     ani.save(dest_gif_path,                       
-            writer="imagemagick",                                                
+            writer="pillow",                                         
             fps=30) 
 
     # plt.draw()
