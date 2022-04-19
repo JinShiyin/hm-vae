@@ -191,14 +191,14 @@ class MotionSeqData(data.Dataset):
         return len(self.ids)
 
 def get_train_loaders_all_data_seq(cfg):
-    root_folder = "/orion/u/jiamanli/github/hm-vae/utils/data"
+    root_folder = "utils/data"
   
     data_folder = os.path.join(root_folder, "for_all_data_motion_model")
 
     if cfg['use_30fps_data']:
-        rot_npy_folder = os.path.join(root_folder, "/orion/u/jiamanli/datasets/amass_for_hm_vae_fps30")
+        rot_npy_folder = os.path.join(root_folder, "/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30")
     else:
-        rot_npy_folder = "/orion/u/jiamanli/datasets/amass_for_hm_vae"
+        rot_npy_folder = "/data/jsy/datasets/AMASS/decompress"
     
     mean_std_path = os.path.join(data_folder, "all_amass_data_mean_std.npy")
 
