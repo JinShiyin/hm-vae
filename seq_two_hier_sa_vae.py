@@ -55,8 +55,8 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.topologies = [topology]
       
-        self.latent_d = args['latent_d']
-        self.shallow_latent_d = args['shallow_latent_d']
+        self.latent_d = args['latent_d'] # 24
+        self.shallow_latent_d = args['shallow_latent_d'] # 12
 
         self.channel_base = [6] # 6D representation 
         self.timestep_list = [args['train_seq_len']]
@@ -69,11 +69,11 @@ class Encoder(nn.Module):
         self.args = args
         self.convs = []
 
-        kernel_size = args['kernel_size']
+        kernel_size = args['kernel_size'] # 15
         padding = (kernel_size - 1) // 2
         bias = True
 
-        for i in range(args['num_layers']):
+        for i in range(args['num_layers']): # 4
             self.channel_base.append(self.channel_base[-1] * 2) # 6, 12, 24,(48, 96)
           
             if args['train_seq_len'] == 8:
@@ -121,11 +121,17 @@ class Encoder(nn.Module):
                                     joint_num=self.edge_num[i], kernel_size=kernel_size, stride=curr_stride,
                                     padding=padding, padding_mode=args['padding_mode'], bias=bias, add_offset=False,
                                     in_offset_channel=3 * self.channel_base[i] // self.channel_base[0]))
+            # print(seq[-1].description)
+            # padding_mode=args['padding_mode']
+            # in_offset_channel=3 * self.channel_base[i] // self.channel_base[0]
+            # print(f"SkeletonConv: neighbor_list={neighbor_list}, in_channels={in_channels}, out_channels={out_channels}, joint_num={self.edge_num[i]}, kernel_size={kernel_size}, stride={curr_stride}, padding={padding}, padding_mode={padding_mode}, bias={bias}, add_offset={False}, in_offset_channel={in_offset_channel}")
+
             self.convs.append(seq[-1])
             last_pool = True if i == args['num_layers'] - 1 else False
             pool = SkeletonPool(edges=self.topologies[i], pooling_mode=args['skeleton_pool'],
                                 channels_per_edge=out_channels // len(neighbor_list), last_pool=last_pool)
             seq.append(pool)
+            # print(seq[-1].description)
             seq.append(nn.LeakyReLU(negative_slope=0.2))
             self.layers.append(nn.Sequential(*seq))
     
@@ -140,6 +146,14 @@ class Encoder(nn.Module):
             self.edge_num.append(len(self.topologies[-1]))
 
     def forward(self, input, offset=None):
+        '''
+        description: 
+        param {*} self
+        param {*} input: bs X (24*6) X T
+        param {*} offset
+        return {*}
+        '''
+        
         # train_hier_level: 1, 2, 3, 4 (deep to shallow)
         z_vector_list = []
         for i, layer in enumerate(self.layers):
@@ -153,7 +167,7 @@ class Encoder(nn.Module):
             bs, _, compressed_t = input.size()
             # print("input shape[1]:{0}".format(input.shape[1]))
             # print("channel:{0}".format(self.channel_base[i+1]))
-            k_edges = input.shape[1] // self.channel_base[i+1]
+            k_edges = input.shape[1] // self.channel_base[i+1] # edge_num
             # print("k_edges:{0}".format(k_edges))
             
             encoder_map_input = input.view(bs, k_edges, -1)
@@ -376,7 +390,7 @@ class TwoHierSAVAEModel(nn.Module):
             iteration_interval = hp['iteration_interval']
    
             if z_idx == len(z_vec_list)-1: # The final deepest layer level
-                l_kl_curr = self.kl_loss(logvar, mu)
+                l_kl_curr = self.kl_loss(logvar, mu) # calculate kl loss with (logvar, mu) and (1, 0) of normal gaussion.
             elif z_idx == 0:
                 if iterations < iteration_interval:
                     l_kl_curr = self.kl_loss(logvar.detach(), mu.detach())
