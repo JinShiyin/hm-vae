@@ -858,6 +858,22 @@ class TwoHierSAVAEModel(nn.Module):
             dest_trans_npy_path = os.path.join(dest_image_directory, str(0), \
                 "sampled_single_window", str(bs_idx)+"_trans.npy")
             np.save(dest_trans_npy_path, pred_seq_w_root_trans_res[:, bs_idx, 0, :].data.cpu().numpy()) # T X 3
+    
+    def standardize_data_specify_dim(self, ori_data, mean_std_data, start_idx, end_idx):
+        # ori_data: T X n_dim
+        mean_val = mean_std_data[[0], start_idx:end_idx] # 1 X n_dim
+        std_val = mean_std_data[[1], start_idx:end_idx] # 1 X n_dim
+        dest_data = (ori_data - mean_val) / std_val # T X n_dim
+        return dest_data
+    
+    def destandardize_data_specify_dim(self, ori_data, mean_std_data, start_idx, end_idx):
+        # ori_data: T X n_dim
+        mean_val = mean_std_data[[0], start_idx:end_idx] # 1 X n_dim
+        std_val = mean_std_data[[1], start_idx:end_idx] # 1 X n_dim
+        dest_data = ori_data * std_val + mean_val # T X n_dim
+        return dest_data
+    
+
 
     def refine_dance_motions(self, hp, image_directory): # For Comparison with VIBE
         self.eval()
