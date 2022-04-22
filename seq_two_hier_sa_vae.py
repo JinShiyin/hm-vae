@@ -1060,6 +1060,61 @@ class TwoHierSAVAEModel(nn.Module):
                 np.save(dest_vibe_rot_npy_path, vibe_pred_rot_mat.data.cpu().numpy())
                 print(f'{dest_vibe_rot_npy_path} saved...')
         print(f'finish! total time: {time.time()-start_time}')
+    
+
+    def refine_amass_motions(self, input_rot_6d, image_directory): # For Comparison with VIBE
+        self.eval()
+        self.enc.eval()
+        self.dec.eval()
+
+        
+        start_time = time.time()
+        with torch.no_grad():
+            pred_cont6DRep = input_rot_6d.float().cuda() # 1 X T X (24*6)
+            bs, timesteps, _ = pred_cont6DRep.size()
+
+            # Process sequence with our model in sliding window fashion, use the centering frame strategy
+            window_size = self.max_timesteps # 64
+            center_frame_start_idx = self.max_timesteps // 2 - 1
+            center_frame_end_idx = self.max_timesteps // 2 - 1
+            # Options: 7, 7; 
+            overlap_len = window_size - (center_frame_end_idx-center_frame_start_idx+1)
+            stride = window_size - overlap_len
+            our_pred_6d_out_seq = None # T X 24 X 6
+            
+            pred_6d_rot = pred_cont6DRep.view(bs, timesteps, 24, 6)
+
+            for t_idx in range(0, timesteps-window_size+1, stride):
+                curr_encoder_input = pred_6d_rot[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
+                our_rec_6d_out, _ = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+                # _, our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+
+                if t_idx == 0:
+                    # The beginning part, we take all the frames before center
+                    our_pred_6d_out_seq = our_rec_6d_out.squeeze(0)[:center_frame_end_idx+1, :, :] 
+                elif t_idx == timesteps-window_size:
+                    # Handle the last window in the end, take all the frames after center_start to make the videl length same as input
+                    our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
+                        our_rec_6d_out[0, center_frame_start_idx:, :, :]), dim=0)
+                else:
+                    our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
+                        our_rec_6d_out[0, center_frame_start_idx:center_frame_end_idx+1, :, :]), dim=0)
+
+            print(f'finish refine seq_6d, used time {time.time()-start_time}')
+            print(f'start visualize...')
+            # Use same skeleton for visualization
+            pred_fk_pose = self.fk_layer(pred_6d_rot.squeeze(0)) # T X 24 X 3
+            our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3
+
+            our_fk_pose[:, :, 0] += 1
+
+            concat_seq_cmp = torch.cat((pred_fk_pose[None, :, :, :], our_fk_pose[None, :, :, :]), dim=0) # 2 X T X 24 X 3
+            # Visualize single seq           
+            show3Dpose_animation_multiple(concat_seq_cmp.data.cpu().numpy(), image_directory, \
+            0, "cmp_vibe_ours_dance_vis", str(0), use_amass=True)
+
+    
+
 
     def cal_l2_dist(self, pred, gt):
         loss = (pred-gt)**2
