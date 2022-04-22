@@ -20,9 +20,9 @@ class SkeletonConv(nn.Module):
 
         self.expanded_neighbour_list = []
         self.expanded_neighbour_list_offset = []
-        self.neighbour_list = neighbour_list
+        self.neighbour_list = neighbour_list  # [idx1, idx2, ...], [], ...num_edges]
         self.add_offset = add_offset
-        self.joint_num = joint_num
+        self.joint_num = joint_num # len(neighbour_list)
 
         self.stride = stride
         self.dilation = 1
@@ -31,12 +31,14 @@ class SkeletonConv(nn.Module):
         self.padding_mode = padding_mode
         self._padding_repeated_twice = (padding, padding)
 
+        # because the input channels are edge_num*embedding_num, that is, for each edge, we have the feature of embedding_num dimension, for example 6(6D rotation), it is also eaual to in_channels_per_joint. So we should expand neighbour list to the input channel idx.
         for neighbour in neighbour_list:
             expanded = []
-            for k in neighbour:
+            for k in neighbour: # neighbour_idx for current edge_idx
                 for i in range(self.in_channels_per_joint):
                     expanded.append(k * self.in_channels_per_joint + i)
             self.expanded_neighbour_list.append(expanded)
+        # print(f'expanded_neighbour_list={self.expanded_neighbour_list}')
 
         if self.add_offset:
             self.offset_enc = SkeletonLinear(neighbour_list, in_offset_channel * len(neighbour_list), out_channels)
@@ -56,6 +58,7 @@ class SkeletonConv(nn.Module):
             self.register_parameter('bias', None)
 
         self.mask = torch.zeros_like(self.weight)
+        # because skeleton convolution don not change the num of edges, so the [self.out_channels_per_joint * i: self.out_channels_per_joint * (i + 1)] of output channel represent the edge of i. According to the neighbour, it is connected to the input channel of expand_neighbour_list[i].
         for i, neighbour in enumerate(self.expanded_neighbour_list):
             self.mask[self.out_channels_per_joint * i: self.out_channels_per_joint * (i + 1), neighbour, ...] = 1
         self.mask = nn.Parameter(self.mask, requires_grad=False)
