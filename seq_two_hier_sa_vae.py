@@ -874,7 +874,38 @@ class TwoHierSAVAEModel(nn.Module):
         return dest_data
     
 
-    def vibe2amass(self, rot_6d):
+    # def vibe2amass(self, rot_6d):
+    #     '''
+    #     description: 
+    #     param {*} rot_6d: bs X T X 24 X 6
+    #     return {*} rot_6d: bs X T X 24 X 6
+    #     '''
+    #     bs, timesteps, n_joints, _ = rot_6d.size()
+    #     rot_6d = rot_6d.view(bs*timesteps, n_joints, 6)
+    #     # rot_matrix = my_tools.rotation_matrix_from_ortho6d(rot_6d) # (bs*timesteps) X 24 X 3 X 3
+    #     rot_matrix = my_tools.rot6d_to_rotmat(rot_6d) # (bs*timesteps*24) X 3 X 3
+    #     # rot_matrix = rot_matrix.view(-1, 3, 3) # (bs*timesteps*24) X 3 X 3
+    #     transform_matrix1 = torch.tensor([
+    #         [1, 0, 0],
+    #         [0, 0, 1],
+    #         [0, -1, 0]
+    #     ]).float().cuda()
+    #     transform_matrix1 = transform_matrix1.unsqueeze(0) # 1 X 3 X 3
+
+    #     transform_matrix2 = torch.tensor([
+    #         [-1, 0, 0],
+    #         [0, -1, 0],
+    #         [0, 0, 1]
+    #     ]).float().cuda()
+    #     transform_matrix2 = transform_matrix2.unsqueeze(0) # 1 X 3 X 3
+    #     transform_matrix = torch.bmm(transform_matrix2, transform_matrix1)
+    #     print(f'transform_matrix.size={transform_matrix.size()}')
+
+    #     rot_matrix = torch.matmul(transform_matrix, rot_matrix) # (bs*timesteps*24) X 3 X 3
+    #     rot_matrix = rot_matrix.view(-1, 24, 3, 3) # (bs*timesteps) X 24 X 3 X 3
+    #     rot_6d = my_tools.rot_mat_to_6d(rot_matrix) # (bs*timesteps) X 24 X 6
+    #     rot_6d = rot_6d.view(bs, timesteps, 24, 6)
+    #     return rot_6d
         '''
         description: 
         param {*} rot_6d: bs X T X 24 X 6
