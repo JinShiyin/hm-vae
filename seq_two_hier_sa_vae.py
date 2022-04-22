@@ -942,6 +942,11 @@ class TwoHierSAVAEModel(nn.Module):
         self.enc.eval()
         self.dec.eval()
 
+        # mean_std_path = 'utils/data/for_all_data_motion_model/all_amass_data_mean_std.npy'
+        # mean_std_data = np.load(mean_std_path) # 2 X n_dim
+        # mean_std_data[1, mean_std_data[1, :]==0] = 1.0
+        # mean_std_data = torch.from_numpy(mean_std_data).cuda()
+
         # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/output/tmp_test"
         # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/dance_test_outputs/urban_dance_camp_00005_4/urban_dance_camp_00005_4"
         # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/for_supp_outputs/final_walk/final_walk"
@@ -975,6 +980,11 @@ class TwoHierSAVAEModel(nn.Module):
                 our_pred_6d_out_seq = None # T X 24 X 6
                 
                 pred_6d_rot = pred_cont6DRep.view(bs, timesteps, 24, 6)
+                # # normailize input
+                # pred_6d_rot = pred_6d_rot.view(bs*timesteps, -1)
+                # pred_6d_rot = self.standardize_data_specify_dim(pred_6d_rot, mean_std_data, 0, 144)
+                # pred_6d_rot = pred_6d_rot.view(bs, timesteps, 24, 6)
+
                 for t_idx in range(0, timesteps-window_size+1, stride):
                     curr_encoder_input = pred_6d_rot[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
                     our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
@@ -988,7 +998,16 @@ class TwoHierSAVAEModel(nn.Module):
                     else:
                         our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
                             our_rec_6d_out[0, center_frame_start_idx:center_frame_end_idx+1, :, :]), dim=0)
-            
+                
+                # # denormalize output
+                # our_pred_6d_out_seq = our_pred_6d_out_seq.view(timesteps, -1)
+                # our_pred_6d_out_seq = self.destandardize_data_specify_dim(our_pred_6d_out_seq, mean_std_data, 0, 144)
+                # our_pred_6d_out_seq = our_pred_6d_out_seq.view(timesteps, 24, -1)
+
+                # pred_6d_rot = pred_6d_rot.view(bs*timesteps, -1)
+                # pred_6d_rot = self.destandardize_data_specify_dim(pred_6d_rot, mean_std_data, 0, 144)
+                # pred_6d_rot = pred_6d_rot.view(bs, timesteps, 24, 6)
+
                 # Use same skeleton for visualization
                 pred_fk_pose = self.fk_layer(pred_6d_rot.squeeze(0)) # T X 24 X 3
                 our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3
