@@ -970,6 +970,18 @@ class TwoHierSAVAEModel(nn.Module):
                 pred_cont6DRep, pred_rot_mat, pred_pose_pos = self.aa2others(pred_aa_data) # 
                 # 1 X T X (24*6), 1 X T X (24*3*3), 1 X T X (24*3)
 
+                # only rotation for the root orientation
+                pred_cont6DRep = pred_cont6DRep.view(bs, timesteps, 24, 6)
+                pred_rot_mat = pred_rot_mat.view(bs, timesteps, 24, 3, 3)
+                root_rot_mat = pred_rot_mat[:, :, [0], :, :] # 1 X T X 1 X 3 X 3
+                root_rot_6d, root_rot_mat = self.vibe2amass_from_rotmat(root_rot_mat)
+                # 1 X T X 1 X 6, 1 X T X 1 X 3 X 3
+                pred_cont6DRep[:, :, [0], :] = root_rot_6d.clone()
+                root_rot_mat[:, :, [0], :, :] = root_rot_mat.clone()
+
+                # pred_cont6DRep, pred_rot_mat = self.vibe2amass_from_rotmat(pred_rot_mat)
+                pred_cont6DRep = pred_cont6DRep.view(bs, timesteps, -1)
+                pred_rot_mat = pred_rot_mat.view(bs, timesteps, -1)
                 # Process sequence with our model in sliding window fashion, use the centering frame strategy
                 window_size = self.max_timesteps
                 center_frame_start_idx = self.max_timesteps // 2 - 1
