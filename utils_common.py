@@ -269,9 +269,9 @@ def show3Dpose_animation(channels, image_directory, iterations, tag, bs_idx, use
     ax.set_ylim3d([-RADIUS + yroot, RADIUS + yroot])
 
     # ax.set_axis_off()
-    # ax.set_xlabel("x")
-    # ax.set_ylabel("y")
-    # ax.set_zlabel("z")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
 
     ani = FuncAnimation(fig,                                            
                         animate,                                        
@@ -384,9 +384,9 @@ def show3Dpose_animation_multiple(channels, image_directory, iterations, tag, bs
     ax.set_ylim3d([-RADIUS + yroot, RADIUS + yroot])
 
     # ax.set_axis_off()
-    # ax.set_xlabel("x")
-    # ax.set_ylabel("y")
-    # ax.set_zlabel("z")
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
 
     ani = FuncAnimation(fig,                                            
                         animate,                                        
@@ -395,9 +395,9 @@ def show3Dpose_animation_multiple(channels, image_directory, iterations, tag, bs
     dest_folder = os.path.join(image_directory, str(iterations), tag)    
     if not os.path.exists(dest_folder):
         os.makedirs(dest_folder)
-    dest_gif_path = os.path.join(dest_folder, str(bs_idx)+".mp4")                        
+    dest_gif_path = os.path.join(dest_folder, str(bs_idx)+".gif")                        
     ani.save(dest_gif_path,                       
-            writer="imagemagick",                                                
+            writer="pillow",                                                
             fps=30) 
 
     # plt.draw()
