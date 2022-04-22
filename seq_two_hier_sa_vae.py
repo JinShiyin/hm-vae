@@ -938,6 +938,9 @@ class TwoHierSAVAEModel(nn.Module):
         rot_matrix = rot_matrix.view(bs, timesteps, n_joints, 3, 3)
         rot_6d = rot_6d.view(bs, timesteps, n_joints, 6)
         return rot_6d, rot_matrix
+
+    # def refine_dance_motions(self, hp, image_directory): # For Comparison with VIBE
+    def refine_dance_motions(self, vibe_path, image_directory): # For Comparison with VIBE
         self.eval()
         self.enc.eval()
         self.dec.eval()
@@ -950,11 +953,14 @@ class TwoHierSAVAEModel(nn.Module):
         # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/output/tmp_test"
         # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/dance_test_outputs/urban_dance_camp_00005_4/urban_dance_camp_00005_4"
         # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/for_supp_outputs/final_walk/final_walk"
-        npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/talk_test_output/test_tmp/test_tmp"
-        pred_theta_path = os.path.join(npy_folder, "vibe_output.pkl")
+        # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/talk_test_output/test_tmp/test_tmp"
+        # pred_theta_path = os.path.join(npy_folder, "vibe_output.pkl")
+        pred_theta_path = vibe_path
+
 
         vibe_pred_pkl = joblib.load(pred_theta_path)
 
+        start_time = time.time()
         with torch.no_grad():
             for p_idx in vibe_pred_pkl:
                 # pred_theta_data = vibe_pred_pkl[p_idx]['pose'][:600] # T X 72
@@ -967,7 +973,7 @@ class TwoHierSAVAEModel(nn.Module):
                 # Process predicted results from other methods as input to encoder
                 pred_aa_data = torch.from_numpy(pred_theta_data).float().cuda() # T X 72
                 pred_aa_data = pred_aa_data[None, :, :] # 1 X T X 72
-                pred_cont6DRep, pred_rot_mat, pred_pose_pos = self.aa2others(pred_aa_data) # 
+                pred_cont6DRep, pred_rot_mat, _ = self.aa2others(pred_aa_data) # 
                 # 1 X T X (24*6), 1 X T X (24*3*3), 1 X T X (24*3)
 
                 # only rotation for the root orientation
@@ -982,8 +988,9 @@ class TwoHierSAVAEModel(nn.Module):
                 # pred_cont6DRep, pred_rot_mat = self.vibe2amass_from_rotmat(pred_rot_mat)
                 pred_cont6DRep = pred_cont6DRep.view(bs, timesteps, -1)
                 pred_rot_mat = pred_rot_mat.view(bs, timesteps, -1)
+
                 # Process sequence with our model in sliding window fashion, use the centering frame strategy
-                window_size = self.max_timesteps
+                window_size = self.max_timesteps # 64
                 center_frame_start_idx = self.max_timesteps // 2 - 1
                 center_frame_end_idx = self.max_timesteps // 2 - 1
                 # Options: 7, 7; 
@@ -992,6 +999,8 @@ class TwoHierSAVAEModel(nn.Module):
                 our_pred_6d_out_seq = None # T X 24 X 6
                 
                 pred_6d_rot = pred_cont6DRep.view(bs, timesteps, 24, 6)
+                # pred_6d_rot = self.vibe2amass(pred_6d_rot)
+
                 # # normailize input
                 # pred_6d_rot = pred_6d_rot.view(bs*timesteps, -1)
                 # pred_6d_rot = self.standardize_data_specify_dim(pred_6d_rot, mean_std_data, 0, 144)
@@ -999,7 +1008,9 @@ class TwoHierSAVAEModel(nn.Module):
 
                 for t_idx in range(0, timesteps-window_size+1, stride):
                     curr_encoder_input = pred_6d_rot[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
-                    our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+                    our_rec_6d_out, _ = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+                    # _, our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+
                     if t_idx == 0:
                         # The beginning part, we take all the frames before center
                         our_pred_6d_out_seq = our_rec_6d_out.squeeze(0)[:center_frame_end_idx+1, :, :] 
@@ -1020,16 +1031,19 @@ class TwoHierSAVAEModel(nn.Module):
                 # pred_6d_rot = self.destandardize_data_specify_dim(pred_6d_rot, mean_std_data, 0, 144)
                 # pred_6d_rot = pred_6d_rot.view(bs, timesteps, 24, 6)
 
+                print(f'finish refine seq_6d, used time {time.time()-start_time}')
+                print(f'start fk...')
                 # Use same skeleton for visualization
                 pred_fk_pose = self.fk_layer(pred_6d_rot.squeeze(0)) # T X 24 X 3
                 our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3
 
                 our_fk_pose[:, :, 0] += 1
 
+                print(f'start visualize...')
                 concat_seq_cmp = torch.cat((pred_fk_pose[None, :, :, :], our_fk_pose[None, :, :, :]), dim=0) # 2 X T X 24 X 3
                 # Visualize single seq           
                 show3Dpose_animation_multiple(concat_seq_cmp.data.cpu().numpy(), image_directory, \
-                0, "cmp_vibe_ours_dance_vis", str(p_idx))
+                0, "cmp_vibe_ours_dance_vis", str(p_idx), use_amass=True)
 
                 # Save rotation matrix to numpy
                 our_pred_rot_mat = my_tools.rotation_matrix_from_ortho6d(our_pred_6d_out_seq.view(-1, 6)) # (T*24) X 3 X 3(our_pred_6d_out_seq)
@@ -1038,11 +1052,14 @@ class TwoHierSAVAEModel(nn.Module):
                 # T X 24 X 3 X 3
                 dest_our_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_our_rot_mat.npy")
                 np.save(dest_our_rot_npy_path, our_pred_rot_mat.data.cpu().numpy())
+                print(f'{dest_our_rot_npy_path} saved...')
             
                 vibe_pred_rot_mat = pred_rot_mat.squeeze(0).view(-1, 24, 3, 3)
                 # T X 24 X 3 X 3
                 dest_vibe_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_vibe_rot_mat.npy")
                 np.save(dest_vibe_rot_npy_path, vibe_pred_rot_mat.data.cpu().numpy())
+                print(f'{dest_vibe_rot_npy_path} saved...')
+        print(f'finish! total time: {time.time()-start_time}')
 
     def cal_l2_dist(self, pred, gt):
         loss = (pred-gt)**2
