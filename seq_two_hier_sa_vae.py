@@ -1115,6 +1115,62 @@ class TwoHierSAVAEModel(nn.Module):
 
     
 
+    def get_mean_rec_res_w_6d_input(self, seq_rot_6d):
+        self.eval()
+        self.enc.eval()
+        self.dec.eval()
+
+        with torch.no_grad():
+            offset = None 
+            # bs, timesteps, _, _ = seq_rot_6d.size() # bs X T X 24 X 6
+            # seq_rot_6d = seq_rot_6d.view(bs, timesteps, -1) # bs X T X (24*6)
+            # seq_rot_6d = seq_rot_6d.float().cuda() # bs X T X (24*6), not normalized
+            # bs, timesteps, _ = seq_rot_6d.size()
+
+
+            # encoder_input = seq_rot_6d.view(bs, timesteps, self.n_joints, -1) # bs X T X 24 X 6
+
+            # input = encoder_input.view(bs, timesteps, -1) # bs X T X (24*9)
+            # input = input.transpose(1, 2) # bs X (24*9) X T
+
+            seq_rot_6d = seq_rot_6d.float().cuda()
+            bs, timesteps, _, _ = seq_rot_6d.size() # bs X T X 24 X 6
+            input = seq_rot_6d.view(bs, timesteps, -1)  # bs X T X (24*6)
+            input = input.transpose(1, 2) # bs X (24*6) X T
+
+            latent, z_vec_list = self.enc(input, offset) # input: bs X (n_edges*input_dim) X T
+            # latent: bs X (k_edges*d) X (T//2^n_layers)
+            # list, each is bs X k_edges X (2*latent_d)
+        
+            mean_z_list = []
+            sampled_z_list = []
+            for z_idx in range(len(z_vec_list)):
+                distributions = z_vec_list[z_idx] # bs X k_edges X (2*latent_d)
+                bs, k_edges, _ = distributions.size()
+                if z_idx == 0:
+                    mu = distributions[:, :, :self.shallow_latent_d].view(-1, self.shallow_latent_d) # (bs*k_edges) X latent_d
+                    logvar = distributions[:, :, self.shallow_latent_d:].view(-1, self.shallow_latent_d) # (bs*k_edges) X latent_d
+                else:
+                    mu = distributions[:, :, :self.latent_d].view(-1, self.latent_d) # (bs*k_edges) X latent_d
+                    logvar = distributions[:, :, self.latent_d:].view(-1, self.latent_d) # (bs*k_edges) X latent_d
+
+                mean_z = mu # (bs*7) X latent_d
+                mean_z = mean_z.view(bs, k_edges, -1) # bs X 7 X latent_d
+                mean_z_list.append(mean_z)
+
+                sampled_z = torch.randn_like(mean_z).cuda()
+                sampled_z_list.append(sampled_z)
+
+            mean_out_cont6d, mean_out_rotation_matrix, mean_out_pose_pos, mean_out_root_v, _, _, _ = self._decode(mean_z_list)
+            # bs X T X 24 X 6, bs X T X 24 X 3 X 3, bs X T X 24 X 3
+           
+            # Get sampled vector motion
+            sampled_out_cont6d, sampled_out_rotation_matrix, sampled_out_pose_pos, sampled_out_root_v, _, _, _ = self._decode(sampled_z_list)
+            # bs X T X 24 X 6, bs X T X 24 X 3 X 3, bs X T X 24 X 3
+
+        return mean_out_cont6d, sampled_out_cont6d
+        # T X bs X 24 X 3, T X bs X 24 X 3, T X bs X 24 X 3
+
 
     def cal_l2_dist(self, pred, gt):
         loss = (pred-gt)**2
