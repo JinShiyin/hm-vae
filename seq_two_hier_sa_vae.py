@@ -1,30 +1,28 @@
-import copy
-import time
-import joblib
-import numpy as np
-import json 
 import os 
-import pickle as pkl 
-import datetime 
-import random 
-
+import json 
+import time
+import copy
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+import random 
+import joblib
+import datetime 
+import numpy as np
+import pickle as pkl 
 
 from torch.optim import lr_scheduler
-
+from torch.distributions import Categorical
+from torch.utils.tensorboard import SummaryWriter
+import torch.nn as nn
 import torchgeometry as tgm
+import torch.nn.functional as F
+import torch.distributions.multivariate_normal as dist_mn
 
 import my_tools
 from fk_layer import ForwardKinematicsLayer
 from skeleton import SkeletonUnpool, SkeletonPool, SkeletonConv, find_neighbor, SkeletonLinear, get_edges
-
-from torch.distributions import Categorical
-import torch.distributions.multivariate_normal as dist_mn
-
 from utils_common import show3Dpose_animation, show3Dpose_animation_multiple, show3Dpose_animation_with_mask
-from torch.utils.tensorboard import SummaryWriter
+from lib.utils.rotation_utils import hmvae_rot6d_to_rotmat, rotmat_to_rot6d
+from lib.utils.conversion_utils import smpl_pose_to_amass_pose, amass_pose_to_smpl_pose
 
 def get_scheduler(optimizer, hp, it=-1):
     if 'lr_policy' not in hp or hp['lr_policy'] == 'constant':
@@ -874,92 +872,13 @@ class TwoHierSAVAEModel(nn.Module):
         std_val = mean_std_data[[1], start_idx:end_idx] # 1 X n_dim
         dest_data = ori_data * std_val + mean_val # T X n_dim
         return dest_data
-    
-
-    # def vibe2amass(self, rot_6d):
-    #     '''
-    #     description: 
-    #     param {*} rot_6d: bs X T X 24 X 6
-    #     return {*} rot_6d: bs X T X 24 X 6
-    #     '''
-    #     bs, timesteps, n_joints, _ = rot_6d.size()
-    #     rot_6d = rot_6d.view(bs*timesteps, n_joints, 6)
-    #     # rot_matrix = my_tools.rotation_matrix_from_ortho6d(rot_6d) # (bs*timesteps) X 24 X 3 X 3
-    #     rot_matrix = my_tools.rot6d_to_rotmat(rot_6d) # (bs*timesteps*24) X 3 X 3
-    #     # rot_matrix = rot_matrix.view(-1, 3, 3) # (bs*timesteps*24) X 3 X 3
-    #     transform_matrix1 = torch.tensor([
-    #         [1, 0, 0],
-    #         [0, 0, 1],
-    #         [0, -1, 0]
-    #     ]).float().cuda()
-    #     transform_matrix1 = transform_matrix1.unsqueeze(0) # 1 X 3 X 3
-
-    #     transform_matrix2 = torch.tensor([
-    #         [-1, 0, 0],
-    #         [0, -1, 0],
-    #         [0, 0, 1]
-    #     ]).float().cuda()
-    #     transform_matrix2 = transform_matrix2.unsqueeze(0) # 1 X 3 X 3
-    #     transform_matrix = torch.bmm(transform_matrix2, transform_matrix1)
-    #     print(f'transform_matrix.size={transform_matrix.size()}')
-
-    #     rot_matrix = torch.matmul(transform_matrix, rot_matrix) # (bs*timesteps*24) X 3 X 3
-    #     rot_matrix = rot_matrix.view(-1, 24, 3, 3) # (bs*timesteps) X 24 X 3 X 3
-    #     rot_6d = my_tools.rot_mat_to_6d(rot_matrix) # (bs*timesteps) X 24 X 6
-    #     rot_6d = rot_6d.view(bs, timesteps, 24, 6)
-    #     return rot_6d
-
-    
-    def vibe2amass_from_rotmat(self, rot_mat):
-        '''
-        description: 
-        param {*} rot_mat: bs X T X 24 X 3 X 3
-        return {*} rot_mat: bs X T X 24 X 3 X 3
-        '''
-        bs, timesteps, n_joints, _, _ = rot_mat.size()
-        rot_mat = rot_mat.view(-1, 3, 3)
-        transform_matrix1 = torch.tensor([
-            [1, 0, 0],
-            [0, 0, 1],
-            [0, -1, 0]
-        ]).float().cuda()
-        transform_matrix1 = transform_matrix1.unsqueeze(0) # 1 X 3 X 3
-
-        transform_matrix2 = torch.tensor([
-            [-1, 0, 0],
-            [0, -1, 0],
-            [0, 0, 1]
-        ]).float().cuda()
-        transform_matrix2 = transform_matrix2.unsqueeze(0) # 1 X 3 X 3
-        transform_matrix = torch.bmm(transform_matrix2, transform_matrix1)
-        # print(f'transform_matrix.size={transform_matrix.size()}')
-
-        rot_matrix = torch.matmul(transform_matrix, rot_mat) # (bs*timesteps*24) X 3 X 3
-        rot_matrix = rot_matrix.view(-1, n_joints, 3, 3) # (bs*timesteps) X 24 X 3 X 3
-        rot_6d = my_tools.rot_mat_to_6d(rot_matrix) # (bs*timesteps) X 24 X 6
-        rot_matrix = rot_matrix.view(bs, timesteps, n_joints, 3, 3)
-        rot_6d = rot_6d.view(bs, timesteps, n_joints, 6)
-        return rot_6d, rot_matrix
 
     # def refine_dance_motions(self, hp, image_directory): # For Comparison with VIBE
     def refine_dance_motions(self, vibe_path, image_directory): # For Comparison with VIBE
         self.eval()
         self.enc.eval()
         self.dec.eval()
-
-        # mean_std_path = 'utils/data/for_all_data_motion_model/all_amass_data_mean_std.npy'
-        # mean_std_data = np.load(mean_std_path) # 2 X n_dim
-        # mean_std_data[1, mean_std_data[1, :]==0] = 1.0
-        # mean_std_data = torch.from_numpy(mean_std_data).cuda()
-
-        # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/output/tmp_test"
-        # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/dance_test_outputs/urban_dance_camp_00005_4/urban_dance_camp_00005_4"
-        # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/for_supp_outputs/final_walk/final_walk"
-        # npy_folder = "/glab2/data/Users/jiaman/adobe/github/VIBE/talk_test_output/test_tmp/test_tmp"
-        # pred_theta_path = os.path.join(npy_folder, "vibe_output.pkl")
         pred_theta_path = vibe_path
-
-
         vibe_pred_pkl = joblib.load(pred_theta_path)
 
         start_time = time.time()
@@ -967,29 +886,16 @@ class TwoHierSAVAEModel(nn.Module):
             for p_idx in vibe_pred_pkl:
                 # pred_theta_data = vibe_pred_pkl[p_idx]['pose'][:600] # T X 72
                 pred_theta_data = vibe_pred_pkl[p_idx]['pose'] # T X 72
-        
                 timesteps, _ = pred_theta_data.shape
-        
                 bs = 1
 
                 # Process predicted results from other methods as input to encoder
                 pred_aa_data = torch.from_numpy(pred_theta_data).float().cuda() # T X 72
-                pred_aa_data = pred_aa_data[None, :, :] # 1 X T X 72
-                pred_cont6DRep, pred_rot_mat, _ = self.aa2others(pred_aa_data) # 
-                # 1 X T X (24*6), 1 X T X (24*3*3), 1 X T X (24*3)
-
-                # only rotation for the root orientation
-                pred_cont6DRep = pred_cont6DRep.view(bs, timesteps, 24, 6)
-                pred_rot_mat = pred_rot_mat.view(bs, timesteps, 24, 3, 3)
-                root_rot_mat = pred_rot_mat[:, :, [0], :, :] # 1 X T X 1 X 3 X 3
-                root_rot_6d, root_rot_mat = self.vibe2amass_from_rotmat(root_rot_mat)
-                # 1 X T X 1 X 6, 1 X T X 1 X 3 X 3
-                pred_cont6DRep[:, :, [0], :] = root_rot_6d.clone()
-                root_rot_mat[:, :, [0], :, :] = root_rot_mat.clone()
-
-                # pred_cont6DRep, pred_rot_mat = self.vibe2amass_from_rotmat(pred_rot_mat)
-                pred_cont6DRep = pred_cont6DRep.view(bs, timesteps, -1)
-                pred_rot_mat = pred_rot_mat.view(bs, timesteps, -1)
+                pred_rot_mat = tgm.angle_axis_to_rotation_matrix(pred_aa_data.view(-1, 3))[:, :3, :3] # (T*24) X 3 X 3
+                pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+                pred_rot_mat = smpl_pose_to_amass_pose(pred_rot_mat) # T X 24 X 3 X 3
+                pred_rot_6d = rotmat_to_rot6d(pred_rot_mat) # (T*24) X 6
+                pred_rot_6d = pred_rot_6d.view(-1, 24, 6).unsqueeze(0) # 1 X T X 24 X 6
 
                 # Process sequence with our model in sliding window fashion, use the centering frame strategy
                 window_size = self.max_timesteps # 64
@@ -1000,16 +906,9 @@ class TwoHierSAVAEModel(nn.Module):
                 stride = window_size - overlap_len
                 our_pred_6d_out_seq = None # T X 24 X 6
                 
-                pred_6d_rot = pred_cont6DRep.view(bs, timesteps, 24, 6)
-                # pred_6d_rot = self.vibe2amass(pred_6d_rot)
-
-                # # normailize input
-                # pred_6d_rot = pred_6d_rot.view(bs*timesteps, -1)
-                # pred_6d_rot = self.standardize_data_specify_dim(pred_6d_rot, mean_std_data, 0, 144)
-                # pred_6d_rot = pred_6d_rot.view(bs, timesteps, 24, 6)
 
                 for t_idx in range(0, timesteps-window_size+1, stride):
-                    curr_encoder_input = pred_6d_rot[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
+                    curr_encoder_input = pred_rot_6d[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
                     our_rec_6d_out, _ = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
                     # _, our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
 
@@ -1023,43 +922,35 @@ class TwoHierSAVAEModel(nn.Module):
                     else:
                         our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
                             our_rec_6d_out[0, center_frame_start_idx:center_frame_end_idx+1, :, :]), dim=0)
-                
-                # # denormalize output
-                # our_pred_6d_out_seq = our_pred_6d_out_seq.view(timesteps, -1)
-                # our_pred_6d_out_seq = self.destandardize_data_specify_dim(our_pred_6d_out_seq, mean_std_data, 0, 144)
-                # our_pred_6d_out_seq = our_pred_6d_out_seq.view(timesteps, 24, -1)
-
-                # pred_6d_rot = pred_6d_rot.view(bs*timesteps, -1)
-                # pred_6d_rot = self.destandardize_data_specify_dim(pred_6d_rot, mean_std_data, 0, 144)
-                # pred_6d_rot = pred_6d_rot.view(bs, timesteps, 24, 6)
 
                 print(f'finish refine seq_6d, used time {time.time()-start_time}')
                 print(f'start fk...')
                 # Use same skeleton for visualization
-                pred_fk_pose = self.fk_layer(pred_6d_rot.squeeze(0)) # T X 24 X 3
-                our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3
-
+                pred_fk_pose = self.fk_layer(pred_rot_6d.squeeze(0)) # T X 24 X 3, vibe
+                our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3, hmvae
                 our_fk_pose[:, :, 0] += 1
 
                 print(f'start visualize...')
                 concat_seq_cmp = torch.cat((pred_fk_pose[None, :, :, :], our_fk_pose[None, :, :, :]), dim=0) # 2 X T X 24 X 3
                 # Visualize single seq           
-                show3Dpose_animation_multiple(concat_seq_cmp.data.cpu().numpy(), image_directory, \
-                0, "cmp_vibe_ours_dance_vis", str(p_idx), use_amass=True)
+                show3Dpose_animation_multiple(concat_seq_cmp.data.cpu().numpy(), image_directory, 0, "cmp_vibe_ours_dance_vis", str(p_idx), use_amass=True)
 
                 # Save rotation matrix to numpy
-                our_pred_rot_mat = my_tools.rotation_matrix_from_ortho6d(our_pred_6d_out_seq.view(-1, 6)) # (T*24) X 3 X 3(our_pred_6d_out_seq)
+                # from amass to smpl
+                our_pred_rot_mat = hmvae_rot6d_to_rotmat(our_pred_6d_out_seq.view(-1, 6)) # (T*24) X 3 X 3(our_pred_6d_out_seq)
                 our_pred_rot_mat = our_pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+                our_pred_rot_mat = amass_pose_to_smpl_pose(our_pred_rot_mat) # T X 24 X 3 X 3
+                pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+                pred_rot_mat = amass_pose_to_smpl_pose(pred_rot_mat) # T X 24 X 3 X 3
 
-                # T X 24 X 3 X 3
+                # save ours
                 dest_our_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_our_rot_mat.npy")
                 np.save(dest_our_rot_npy_path, our_pred_rot_mat.data.cpu().numpy())
                 print(f'{dest_our_rot_npy_path} saved...')
-            
-                vibe_pred_rot_mat = pred_rot_mat.squeeze(0).view(-1, 24, 3, 3)
-                # T X 24 X 3 X 3
+
+                # save vibe
                 dest_vibe_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_vibe_rot_mat.npy")
-                np.save(dest_vibe_rot_npy_path, vibe_pred_rot_mat.data.cpu().numpy())
+                np.save(dest_vibe_rot_npy_path, pred_rot_mat.data.cpu().numpy())
                 print(f'{dest_vibe_rot_npy_path} saved...')
         print(f'finish! total time: {time.time()-start_time}')
     
