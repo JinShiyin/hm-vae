@@ -112,3 +112,4 @@ saves/
 *.out
 
 outputs/
+pyopengl/
