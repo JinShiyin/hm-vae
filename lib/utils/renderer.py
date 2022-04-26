@@ -116,10 +116,13 @@ class Renderer:
             render_flags = RenderFlags.RGBA
 
         rgb, _ = self.renderer.render(self.scene, flags=render_flags)
-        valid_mask = (rgb[:, :, -1] > 0)[:, :, np.newaxis]
-        # output_img = rgb[:, :, :-1] * valid_mask + (1 - valid_mask) * img
-        output_img = rgb * valid_mask + (1 - valid_mask) * img
-        image = output_img.astype(np.uint8)
+        if self.orig_img:
+            valid_mask = (rgb[:, :, -1] > 0)[:, :, np.newaxis]
+            # output_img = rgb[:, :, :-1] * valid_mask + (1 - valid_mask) * img
+            output_img = rgb * valid_mask + (1 - valid_mask) * img
+            image = output_img.astype(np.uint8)
+        else:
+            image = rgb.astype(np.uint8)
 
         self.scene.remove_node(mesh_node)
         self.scene.remove_node(cam_node)
