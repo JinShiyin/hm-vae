@@ -3,10 +3,17 @@ import numpy as np
 import json 
 import random 
 
+# original hm-vae
+# amass_splits = {
+#     'vald': ['HumanEva', 'MPI_HDM05', 'SFU', 'MPI_mosh'],
+#     'test': ['Transitions_mocap', 'SSM_synced'],
+#     'train': ['CMU', 'MPI_Limits', 'TotalCapture', 'Eyes_Japan_Dataset', 'KIT', 'BioMotionLab_NTroje', 'EKUT', 'TCD_handMocap', 'ACCAD']
+# }
+
 amass_splits = {
     'vald': ['HumanEva', 'MPI_HDM05', 'SFU', 'MPI_mosh'],
     'test': ['Transitions_mocap', 'SSM_synced'],
-    'train': ['CMU', 'MPI_Limits', 'TotalCapture', 'Eyes_Japan_Dataset', 'KIT', 'BioMotionLab_NTroje', 'EKUT', 'TCD_handMocap', 'ACCAD']
+    'train': ['CMU', 'DanceDB', 'EKUT', 'Eyes_Japan_Dataset', 'BMLmovi', 'GRAB', 'SOMA', 'DFaust_67', 'BioMotionLab_NTroje', 'TCD_handMocap', 'TotalCapture', 'MPI_Limits', 'KIT', 'BMLhandball', 'ACCAD','HUMAN4D',]
 }
 
 def get_vname(ori_v_seq_name):
@@ -88,33 +95,37 @@ def gen_json(train_json, val_json, npy_folder):
     json.dump(val_dict, open(val_json, 'w'))
 
 if __name__ == "__main__":
-    data_folder = "for_subset_motion_model"
-    if not os.path.exists(data_folder):
-        os.makedirs(data_folder)
-    train_json = os.path.join(data_folder, "train_walk_subset_motion_data.json")
-    val_json = os.path.join(data_folder, "val_walk_subset_motion_data.json")
-    npy_folder = "./data/processed_walk_subset_data"
-    # gen_json(train_json, val_json, npy_folder)
-    # train cnt: 160, val cnt: 29
+    # data_folder = "for_subset_motion_model"
+    # if not os.path.exists(data_folder):
+    #     os.makedirs(data_folder)
+    # train_json = os.path.join(data_folder, "train_walk_subset_motion_data.json")
+    # val_json = os.path.join(data_folder, "val_walk_subset_motion_data.json")
+    # npy_folder = "./data/processed_walk_subset_data"
+    # # gen_json(train_json, val_json, npy_folder)
+    # # train cnt: 160, val cnt: 29
 
-    data_folder = "for_subset_motion_model"
-    if not os.path.exists(data_folder):
-        os.makedirs(data_folder)
-    train_json = os.path.join(data_folder, "train_salsa_subset_motion_data.json")
-    val_json = os.path.join(data_folder, "val_salsa_subset_motion_data.json")
-    npy_folder = "./data/processed_salsa_subset_data"
-    # gen_json(train_json, val_json, npy_folder)
-    # train cnt: 18, val cnt: 4
+    # data_folder = "for_subset_motion_model"
+    # if not os.path.exists(data_folder):
+    #     os.makedirs(data_folder)
+    # train_json = os.path.join(data_folder, "train_salsa_subset_motion_data.json")
+    # val_json = os.path.join(data_folder, "val_salsa_subset_motion_data.json")
+    # npy_folder = "./data/processed_salsa_subset_data"
+    # # gen_json(train_json, val_json, npy_folder)
+    # # train cnt: 18, val cnt: 4
 
-    data_folder = "for_all_data_motion_model"
+    data_folder = "data/for_all_data_motion_model"
     if not os.path.exists(data_folder):
         os.makedirs(data_folder)
     train_json = os.path.join(data_folder, "train_all_amass_motion_data.json")
     val_json = os.path.join(data_folder, "val_all_amass_motion_data.json")
     test_json = os.path.join(data_folder, "test_all_amass_motion_data.json")
-    npy_folder = "./data/processed_all_amass_data"
+    npy_folder = "/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30"
     gen_all_json(train_json, val_json, test_json, npy_folder)
     
     # Training sequences:10818
+    # Validation sequences:363
+    # Test sequences:140
+
+    # Training sequences:14381
     # Validation sequences:363
     # Test sequences:140
