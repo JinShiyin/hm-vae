@@ -883,75 +883,79 @@ class TwoHierSAVAEModel(nn.Module):
 
         start_time = time.time()
         with torch.no_grad():
-            for p_idx in vibe_pred_pkl:
-                # pred_theta_data = vibe_pred_pkl[p_idx]['pose'][:600] # T X 72
-                pred_theta_data = vibe_pred_pkl[p_idx]['pose'] # T X 72
-                timesteps, _ = pred_theta_data.shape
-                bs = 1
+            p_idx = 1
+            # for p_idx in vibe_pred_pkl:
+            # if p_idx > 1:
+            #     print(f'only refine one person, skip {p_idx}')
+            #     break
+            # pred_theta_data = vibe_pred_pkl[p_idx]['pose'][:600] # T X 72
+            pred_theta_data = vibe_pred_pkl[p_idx]['pose'] # T X 72
+            timesteps, _ = pred_theta_data.shape
+            bs = 1
 
-                # Process predicted results from other methods as input to encoder
-                pred_aa_data = torch.from_numpy(pred_theta_data).float().cuda() # T X 72
-                pred_rot_mat = tgm.angle_axis_to_rotation_matrix(pred_aa_data.view(-1, 3))[:, :3, :3] # (T*24) X 3 X 3
-                pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
-                pred_rot_mat = smpl_pose_to_amass_pose(pred_rot_mat) # T X 24 X 3 X 3
-                pred_rot_6d = rotmat_to_rot6d(pred_rot_mat) # (T*24) X 6
-                pred_rot_6d = pred_rot_6d.view(-1, 24, 6).unsqueeze(0) # 1 X T X 24 X 6
+            # Process predicted results from other methods as input to encoder
+            pred_aa_data = torch.from_numpy(pred_theta_data).float().cuda() # T X 72
+            pred_rot_mat = tgm.angle_axis_to_rotation_matrix(pred_aa_data.view(-1, 3))[:, :3, :3] # (T*24) X 3 X 3
+            pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+            pred_rot_mat = smpl_pose_to_amass_pose(pred_rot_mat) # T X 24 X 3 X 3
+            pred_rot_6d = rotmat_to_rot6d(pred_rot_mat) # (T*24) X 6
+            pred_rot_6d = pred_rot_6d.view(-1, 24, 6).unsqueeze(0) # 1 X T X 24 X 6
 
-                # Process sequence with our model in sliding window fashion, use the centering frame strategy
-                window_size = self.max_timesteps # 64
-                center_frame_start_idx = self.max_timesteps // 2 - 1
-                center_frame_end_idx = self.max_timesteps // 2 - 1
-                # Options: 7, 7; 
-                overlap_len = window_size - (center_frame_end_idx-center_frame_start_idx+1)
-                stride = window_size - overlap_len
-                our_pred_6d_out_seq = None # T X 24 X 6
-                
+            # Process sequence with our model in sliding window fashion, use the centering frame strategy
+            window_size = self.max_timesteps # 64
+            center_frame_start_idx = self.max_timesteps // 2 - 1
+            center_frame_end_idx = self.max_timesteps // 2 - 1
+            # Options: 7, 7; 
+            overlap_len = window_size - (center_frame_end_idx-center_frame_start_idx+1)
+            stride = window_size - overlap_len
+            our_pred_6d_out_seq = None # T X 24 X 6
+            
 
-                for t_idx in range(0, timesteps-window_size+1, stride):
-                    curr_encoder_input = pred_rot_6d[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
-                    our_rec_6d_out, _ = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
-                    # _, our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+            for t_idx in range(0, timesteps-window_size+1, stride):
+                curr_encoder_input = pred_rot_6d[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
+                our_rec_6d_out, _ = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
+                # _, our_rec_6d_out = self.get_mean_rec_res_w_6d_input(curr_encoder_input) # bs(1) X T(16) X 24 X 6(our 6d format)
 
-                    if t_idx == 0:
-                        # The beginning part, we take all the frames before center
-                        our_pred_6d_out_seq = our_rec_6d_out.squeeze(0)[:center_frame_end_idx+1, :, :] 
-                    elif t_idx == timesteps-window_size:
-                        # Handle the last window in the end, take all the frames after center_start to make the videl length same as input
-                        our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
-                            our_rec_6d_out[0, center_frame_start_idx:, :, :]), dim=0)
-                    else:
-                        our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
-                            our_rec_6d_out[0, center_frame_start_idx:center_frame_end_idx+1, :, :]), dim=0)
+                if t_idx == 0:
+                    # The beginning part, we take all the frames before center
+                    our_pred_6d_out_seq = our_rec_6d_out.squeeze(0)[:center_frame_end_idx+1, :, :] 
+                elif t_idx == timesteps-window_size:
+                    # Handle the last window in the end, take all the frames after center_start to make the videl length same as input
+                    our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
+                        our_rec_6d_out[0, center_frame_start_idx:, :, :]), dim=0)
+                else:
+                    our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
+                        our_rec_6d_out[0, center_frame_start_idx:center_frame_end_idx+1, :, :]), dim=0)
 
-                print(f'finish refine seq_6d, used time {time.time()-start_time}')
-                print(f'start fk...')
-                # Use same skeleton for visualization
-                pred_fk_pose = self.fk_layer(pred_rot_6d.squeeze(0)) # T X 24 X 3, vibe
-                our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3, hmvae
-                our_fk_pose[:, :, 0] += 1
+            print(f'finish refine seq_6d, used time {time.time()-start_time}')
+            print(f'start fk...')
+            # Use same skeleton for visualization
+            pred_fk_pose = self.fk_layer(pred_rot_6d.squeeze(0)) # T X 24 X 3, vibe
+            our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3, hmvae
+            our_fk_pose[:, :, 0] += 1
 
-                print(f'start visualize...')
-                concat_seq_cmp = torch.cat((pred_fk_pose[None, :, :, :], our_fk_pose[None, :, :, :]), dim=0) # 2 X T X 24 X 3
-                # Visualize single seq           
-                show3Dpose_animation_multiple(concat_seq_cmp.data.cpu().numpy(), image_directory, 0, "cmp_vibe_ours_dance_vis", str(p_idx), use_amass=True)
+            print(f'start visualize...')
+            concat_seq_cmp = torch.cat((pred_fk_pose[None, :, :, :], our_fk_pose[None, :, :, :]), dim=0) # 2 X T X 24 X 3
+            # Visualize single seq           
+            show3Dpose_animation_multiple(concat_seq_cmp.data.cpu().numpy(), image_directory, 0, "cmp_vibe_ours_dance_vis", str(p_idx), use_amass=True)
 
-                # Save rotation matrix to numpy
-                # from amass to smpl
-                our_pred_rot_mat = hmvae_rot6d_to_rotmat(our_pred_6d_out_seq.view(-1, 6)) # (T*24) X 3 X 3(our_pred_6d_out_seq)
-                our_pred_rot_mat = our_pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
-                our_pred_rot_mat = amass_pose_to_smpl_pose(our_pred_rot_mat) # T X 24 X 3 X 3
-                pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
-                pred_rot_mat = amass_pose_to_smpl_pose(pred_rot_mat) # T X 24 X 3 X 3
+            # Save rotation matrix to numpy
+            # from amass to smpl
+            our_pred_rot_mat = hmvae_rot6d_to_rotmat(our_pred_6d_out_seq.view(-1, 6)) # (T*24) X 3 X 3(our_pred_6d_out_seq)
+            our_pred_rot_mat = our_pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+            our_pred_rot_mat = amass_pose_to_smpl_pose(our_pred_rot_mat) # T X 24 X 3 X 3
+            pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+            pred_rot_mat = amass_pose_to_smpl_pose(pred_rot_mat) # T X 24 X 3 X 3
 
-                # save ours
-                dest_our_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_our_rot_mat.npy")
-                np.save(dest_our_rot_npy_path, our_pred_rot_mat.data.cpu().numpy())
-                print(f'{dest_our_rot_npy_path} saved...')
+            # save ours
+            dest_our_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_our_rot_mat.npy")
+            np.save(dest_our_rot_npy_path, our_pred_rot_mat.data.cpu().numpy())
+            print(f'{dest_our_rot_npy_path} saved...')
 
-                # save vibe
-                dest_vibe_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_vibe_rot_mat.npy")
-                np.save(dest_vibe_rot_npy_path, pred_rot_mat.data.cpu().numpy())
-                print(f'{dest_vibe_rot_npy_path} saved...')
+            # save vibe
+            dest_vibe_rot_npy_path = os.path.join(image_directory, str(p_idx)+"_vibe_rot_mat.npy")
+            np.save(dest_vibe_rot_npy_path, pred_rot_mat.data.cpu().numpy())
+            print(f'{dest_vibe_rot_npy_path} saved...')
         print(f'finish! total time: {time.time()-start_time}')
     
 
