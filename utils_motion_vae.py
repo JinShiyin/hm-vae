@@ -191,12 +191,14 @@ class MotionSeqData(data.Dataset):
         return len(self.ids)
 
 def get_train_loaders_all_data_seq(cfg):
-    root_folder = "utils/data"
+    # root_folder = "utils/data"
+    root_folder = "data"
   
     data_folder = os.path.join(root_folder, "for_all_data_motion_model")
 
     if cfg['use_30fps_data']:
-        rot_npy_folder = os.path.join(root_folder, "/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30")
+        # rot_npy_folder = os.path.join("/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30")
+        rot_npy_folder = "/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30"
     else:
         rot_npy_folder = "/data/jsy/datasets/AMASS/decompress"
     

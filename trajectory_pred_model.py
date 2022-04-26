@@ -195,7 +195,8 @@ class TrajectoryModel(nn.Module):
         # self.fc_mapping = nn.Linear(self.d_model, 3)
         self.fc_mapping = nn.Linear(self.d_model*7, 3)
 
-        mean_std_npy = "./utils/data/for_all_data_motion_model/all_amass_data_mean_std.npy"
+        # mean_std_npy = "./utils/data/for_all_data_motion_model/all_amass_data_mean_std.npy"
+        mean_std_npy = "data/for_all_data_motion_model/all_amass_data_mean_std.npy"
               
         mean_std_data = np.load(mean_std_npy) # 2 X n_dim
         mean_std_data[1, mean_std_data[1, :]==0] = 1.0
