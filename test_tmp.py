@@ -35,34 +35,47 @@ import numpy as np
 # import torch
 # print(torch.Size([1, 1]))
 
-import torch
-import time
-from lib.models.smpl import SMPL, VIBE_DATA_DIR
+# ###################################### test smpl model ########################
+# import torch
+# import time
+# from lib.models.smpl import SMPL, VIBE_DATA_DIR
 
-batch_size = 301
-smpl = SMPL(
-    VIBE_DATA_DIR,
-    batch_size=batch_size,
-    create_transl=False
-)
-smpl.cuda()
-smpl.eval()
-betas = torch.zeros(batch_size, 10).float().cuda()
-body_pose = torch.zeros(batch_size, 23, 3, 3).float().cuda()
-global_orient = torch.zeros(batch_size, 1, 3, 3).float().cuda()
+# batch_size = 301
+# smpl = SMPL(
+#     VIBE_DATA_DIR,
+#     batch_size=batch_size,
+#     create_transl=False
+# )
+# smpl.cuda()
+# smpl.eval()
+# betas = torch.zeros(batch_size, 10).float().cuda()
+# body_pose = torch.zeros(batch_size, 23, 3, 3).float().cuda()
+# global_orient = torch.zeros(batch_size, 1, 3, 3).float().cuda()
 
-while True:
-    with torch.no_grad():
-        start_time = time.time()
-        smpl_output = smpl(
-            betas=betas,
-            body_pose=body_pose, # T X 23 X 3 X 3
-            global_orient=global_orient, # T X 1 X 3 X 3
-            pose2rot=False
-        )
-        verts = smpl_output.vertices
-        print(verts.shape)
-        print(f'used_time = {time.time()-start_time}')
+# while True:
+#     with torch.no_grad():
+#         start_time = time.time()
+#         smpl_output = smpl(
+#             betas=betas,
+#             body_pose=body_pose, # T X 23 X 3 X 3
+#             global_orient=global_orient, # T X 1 X 3 X 3
+#             pose2rot=False
+#         )
+#         verts = smpl_output.vertices
+#         print(verts.shape)
+#         print(f'used_time = {time.time()-start_time}')
 
 
+# ############################## generate 3dpw videos ###################
+from lib.utils.demo_utils import images_to_video
+import os
+
+img_root = '/data/jsy/datasets/3DPW/imageFiles'
+img_folder_name_list = os.listdir(img_root)
+out_dir = '/data/jsy/datasets/3DPW/videos'
+image_name_pattern = f'image_%05d.jpg'
+for img_folder_name in img_folder_name_list:
+    img_folder = os.path.join(img_root, img_folder_name)
+    out_video_path = os.path.join(out_dir, f'{img_folder_name}.mp4')
+    images_to_video(img_folder, out_video_path, image_name_pattern)
 
