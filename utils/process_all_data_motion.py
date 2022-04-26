@@ -42,30 +42,33 @@ joints_to_use = np.arange(0, 156).reshape((-1, 3))[joints_to_use].reshape(-1)
 # ]
 
 all_sequences = [
-    'MPI_HDM05', 
-    'DanceDB', 
+    # ############### val
+    'MPI_HDM05',
     'HumanEva', 
     'SFU', 
+    'MPI_mosh', 
+    # ############### test
+    'Transitions_mocap', 
+    'SSM_synced',
+    # ############### train
+    'CMU', 
+    'DanceDB', 
     'EKUT', 
     'Eyes_Japan_Dataset', 
     'BMLmovi', 
     'GRAB', 
     'SOMA', 
-    'CMU', 
     'DFaust_67', 
     'BioMotionLab_NTroje', 
     'TCD_handMocap', 
     'TotalCapture', 
-    'MPI_Limits', 
+    'MPI_Limits',  
     'KIT', 
-    # 'WEIZMANN', 
     'BMLhandball', 
-    'Transitions_mocap', 
     'ACCAD', 
-    # 'CNRS', 
     'HUMAN4D', 
-    'SSM_synced', 
-    'MPI_mosh'
+    # 'WEIZMANN', 
+    # 'CNRS', 
 ]
 
 # walking_id = ["07", "08", "35", "36", "37", "38", "45", "46", "47", "78", "91"] # subject id
