@@ -16,15 +16,16 @@ config = get_config(cfg_path)
 
 # print(f'build model...')
 model = TwoHierSAVAEModel(config)
-model_path = 'outputs/len64_no_aug_hm_vae/20220419-120000/checkpoints/gen_00200000.pt'
-# model_path = 'outputs/len64_no_aug_hm_vae/20220420-101543/checkpoints/gen_00500000.pt'
+# model_path = 'outputs/len64_no_aug_hm_vae/20220426-173227/checkpoints/gen_00040000.pt'
+# model_path = 'outputs/len64_no_aug_hm_vae/20220422-114625/checkpoints/gen_01250000.pt'
+model_path = 'outputs/len64_no_aug_hm_vae/20220427-112637/checkpoints/gen_00060000.pt' # seq_len=8
 print(f'load checkpoint from {model_path}...')
 model.load_state_dict(torch.load(model_path)['state_dict'])
 model.cuda()
 model.eval()
 
 # refine vibe
-video_name = 'sample_video' # hiphop_clip1, sample_video
+video_name = 'downtown_weeklyMarket_00' # hiphop_clip1, sample_video, downtown_walkUphill_00, outdoors_fencing_01, outdoors_freestyle_01, downtown_weeklyMarket_00
 vibe_path = f'/data/jsy/code/VIBE/output/{video_name}/vibe_output.pkl'
 time_stamp = time.strftime("%Y%m%d-%H%M%S", time.localtime())
 # time_stamp = "0-test"
@@ -33,6 +34,7 @@ output_dir = os.path.join(output_root, f'{time_stamp}-{video_name}')
 os.makedirs(output_dir, exist_ok=True)
 print('start refine vibe...')
 model.refine_dance_motions(vibe_path=vibe_path, image_directory=output_dir)
+# model.refine_dance_motions_not_center_strategy(vibe_path=vibe_path, image_directory=output_dir)
 
 
 # # refine test dataset
