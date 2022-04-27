@@ -6,12 +6,15 @@ Date: 2022-04-27 14:12:47
 '''
 import os
 import torch
-import torch.nn as nn
+import joblib
 import numpy as np
+import torch.nn as nn
+import torchgeometry as tgm
 from fk_layer import ForwardKinematicsLayer
 from lib.models.motion_vae import MotionVAE
 from lib.utils.common_utils import get_model_list, get_scheduler, weights_init
-from lib.utils.rotation_utils import hmvae_rot6d_to_rotmat
+from lib.utils.conversion_utils import amass_pose_to_smpl_pose, smpl_pose_to_amass_pose
+from lib.utils.rotation_utils import hmvae_rot6d_to_rotmat, rotmat_to_rot6d
 
 
 class MotionVAETrainer(nn.Module):
@@ -97,14 +100,14 @@ class MotionVAETrainer(nn.Module):
         # ori_data: T X n_dim
         mean_val = self.mean_std_data[[0], :] # 1 X n_dim
         std_val = self.mean_std_data[[1], :] # 1 X n_dim
-        dest_data = (ori_data - mean_val)/std_val # T X n_dim
+        dest_data = (ori_data - mean_val)/(std_val+1e-8) # T X n_dim
         return dest_data
 
     def standardize_data_specify_dim(self, ori_data, start_idx, end_idx):
         # ori_data: T X n_dim
         mean_val = self.mean_std_data[[0], start_idx:end_idx] # 1 X n_dim
         std_val = self.mean_std_data[[1], start_idx:end_idx] # 1 X n_dim
-        dest_data = (ori_data - mean_val)/std_val # T X n_dim
+        dest_data = (ori_data - mean_val)/(std_val+1e-8) # T X n_dim
         return dest_data
 
 
@@ -113,6 +116,12 @@ class MotionVAETrainer(nn.Module):
         seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_joint_pos, seq_linear_v, seq_angular_v, seq_root_v = data
         
         rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
+
+        # print(f'seq_joint_pos={seq_joint_pos}')
+        # print(f'rec_seq_joint_pos={rec_seq_joint_pos}')
+
+        # print(f'seq_linear_v={seq_linear_v}')
+        # print(f'rec_seq_linear_v={rec_seq_linear_v}')
 
         if self.cfg['rec_joint_pos_w'] != 0:
             self.loss_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
@@ -192,6 +201,67 @@ class MotionVAETrainer(nn.Module):
             rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, _, _ = self.forward(seq_rot_6d)
         self.train()
         return rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos
+    
+
+    def refine_vibe(self, vibe_data_path):
+        self.eval()
+        with torch.no_grad():
+            pred_theta_data = joblib.load(vibe_data_path)
+            pred_theta_data = pred_theta_data[1]['pose'] # T X 72
+            timesteps, _ = pred_theta_data.shape 
+
+            # Process predicted results from other methods as input to encoder
+            pred_aa_data = torch.from_numpy(pred_theta_data).float().cuda() # T X 72
+            pred_rot_mat = tgm.angle_axis_to_rotation_matrix(pred_aa_data.view(-1, 3))[:, :3, :3] # (T*24) X 3 X 3
+            pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+            pred_rot_mat = smpl_pose_to_amass_pose(pred_rot_mat) # T X 24 X 3 X 3
+            pred_rot_6d = rotmat_to_rot6d(pred_rot_mat) # (T*24) X 6
+            pred_rot_6d = pred_rot_6d.view(-1, 24, 6).unsqueeze(0) # 1 X T X 24 X 6
+
+            # Process sequence with our model in sliding window fashion, use the centering frame strategy
+            window_size = self.cfg['train_seq_len'] # 64
+            center_frame_start_idx = self.cfg['train_seq_len'] // 2 - 1
+            center_frame_end_idx = self.cfg['train_seq_len'] // 2 - 1
+            # Options: 7, 7; 
+            overlap_len = window_size - (center_frame_end_idx-center_frame_start_idx+1)
+            stride = window_size - overlap_len
+            our_pred_6d_out_seq = None # T X 24 X 6
+            
+
+            for t_idx in range(0, timesteps-window_size+1, stride):
+                curr_encoder_input = pred_rot_6d[:, t_idx:t_idx+window_size, :, :].cuda() # bs(1) X 16 X 24 X 6
+                our_rec_6d_out = self.model(curr_encoder_input.view(1, window_size, -1)) # 1 X 64 X (24*6)
+                our_rec_6d_out = our_rec_6d_out.view(1, window_size, 24, 6)
+
+                if t_idx == 0:
+                    # The beginning part, we take all the frames before center
+                    our_pred_6d_out_seq = our_rec_6d_out.squeeze(0)[:center_frame_end_idx+1, :, :] 
+                elif t_idx == timesteps-window_size:
+                    # Handle the last window in the end, take all the frames after center_start to make the videl length same as input
+                    our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
+                        our_rec_6d_out[0, center_frame_start_idx:, :, :]), dim=0)
+                else:
+                    our_pred_6d_out_seq = torch.cat((our_pred_6d_out_seq, \
+                        our_rec_6d_out[0, center_frame_start_idx:center_frame_end_idx+1, :, :]), dim=0)
+
+            self.logger.info(f'start fk...')
+            # Use same skeleton for visualization
+            pred_fk_pose = self.fk_layer(pred_rot_6d.squeeze(0)) # T X 24 X 3, vibe
+            our_fk_pose = self.fk_layer(our_pred_6d_out_seq) # T X 24 X 3, hmvae
+            our_fk_pose[:, :, 0] += 1
+
+            concat_seq_cmp = torch.cat((pred_fk_pose[None, :, :, :], our_fk_pose[None, :, :, :]), dim=0) # 2 X T X 24 X 3
+
+            # from amass to smpl
+            our_pred_rot_mat = hmvae_rot6d_to_rotmat(our_pred_6d_out_seq.view(-1, 6)) # (T*24) X 3 X 3(our_pred_6d_out_seq)
+            our_pred_rot_mat = our_pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+            our_pred_rot_mat = amass_pose_to_smpl_pose(our_pred_rot_mat) # T X 24 X 3 X 3
+            pred_rot_mat = pred_rot_mat.view(-1, 24, 3, 3) # T X 24 X 3 X 3
+            pred_rot_mat = amass_pose_to_smpl_pose(pred_rot_mat) # T X 24 X 3 X 3
+        self.train()
+
+        return concat_seq_cmp, our_pred_rot_mat, pred_rot_mat
+
     
     def update_learning_rate(self):
         if self.scheduler is not None:
