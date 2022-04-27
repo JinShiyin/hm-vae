@@ -204,7 +204,7 @@ class Decoder(nn.Module):
                                     joint_num=self.enc.edge_num[args['num_layers'] - i - 1], kernel_size=kernel_size, stride=curr_stride,
                                     padding=padding, padding_mode=args['padding_mode'], bias=bias, add_offset=False,
                                     in_offset_channel=3 * self.enc.channel_base[args['num_layers'] - i - 1] // self.enc.channel_base[0]))
-            print(f'in_channels={in_channels}, out_channels={out_channels}')
+            # print(f'in_channels={in_channels}, out_channels={out_channels}')
 
             self.convs.append(seq[-1])
             if i != args['num_layers'] - 1: seq.append(nn.LeakyReLU(negative_slope=0.2))
