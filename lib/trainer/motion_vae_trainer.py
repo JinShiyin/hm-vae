@@ -26,7 +26,7 @@ class MotionVAETrainer(nn.Module):
         for param in self.fk_layer.parameters():
             param.requires_grad = False
         
-        self.mean_std_data = torch.from_numpy(np.load(cfg['mean_std_path'])).float() # 2 X 579
+        self.mean_std_data = torch.from_numpy(np.load(cfg['mean_std_path'])).float().cuda() # 2 X 579
 
         # set optimizer and scheduler
         params = list(self.model.parameters())
@@ -37,14 +37,14 @@ class MotionVAETrainer(nn.Module):
         self.model.apply(weights_init(cfg['init']))
 
         # init loss
-        self.l_rec_rot_6d = torch.zeros(1)
-        self.l_rec_rot_mat = torch.zeros(1)
-        self.l_rec_rot_pos = torch.zeros(1)
-        self.l_rec_joint_pos = torch.zeros(1)
-        self.l_rec_linear_v = torch.zeros(1)
-        self.l_rec_angular_v = torch.zeros(1)
-        self.l_rec_root_v = torch.zeros(1)
-        self.l_rec_total = torch.zeros(1)
+        self.loss_rec_rot_6d = torch.zeros(1).cuda()
+        self.loss_rec_rot_mat = torch.zeros(1).cuda()
+        self.loss_rec_rot_pos = torch.zeros(1).cuda()
+        self.loss_rec_joint_pos = torch.zeros(1).cuda()
+        self.loss_rec_linear_v = torch.zeros(1).cuda()
+        self.loss_rec_angular_v = torch.zeros(1).cuda()
+        self.loss_rec_root_v = torch.zeros(1).cuda()
+        self.loss_rec_total = torch.zeros(1).cuda()
     
     def forward(self, seq_rot_6d):
         '''
@@ -53,7 +53,7 @@ class MotionVAETrainer(nn.Module):
         param {*} seq_rot_6d: bs X T X (24*6)
         return {*}
         '''
-        bs, timesteps, _ = seq_rot_6d # bs X T X (24*6)
+        bs, timesteps, _ = seq_rot_6d.size() # bs X T X (24*6)
         n_joints = self.cfg['n_joints']
         # get rec_rot_6d
         rec_seq_rot_6d = self.model(seq_rot_6d) # bs X T X (24*6)
@@ -61,8 +61,8 @@ class MotionVAETrainer(nn.Module):
         rec_seq_rot_mat = rec_seq_rot_mat.view(-1, n_joints, 3, 3) # (bs*T) X 24 X 3 X 3
         rec_seq_rot_pos = self.fk_layer(rec_seq_rot_mat) # (bs*T) X 24 X 3
 
-        rec_seq_rot_mat = rec_seq_rot_mat.view(bs, timesteps, -1) # bs X T X (24*3*3)
-        rec_seq_rot_pos = rec_seq_rot_pos.view(bs, timesteps, -1) # bs X T X (24*3)
+        rec_seq_rot_mat = rec_seq_rot_mat.contiguous().view(bs, timesteps, -1) # bs X T X (24*3*3)
+        rec_seq_rot_pos = rec_seq_rot_pos.contiguous().view(bs, timesteps, -1) # bs X T X (24*3)
 
         # normalize rec_seq_rot_pos to get rec_seq_joint_pos
         start_idx = 24*6+24*3*3+24*3
@@ -114,33 +114,33 @@ class MotionVAETrainer(nn.Module):
         
         rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
 
-        if self.cfg['joint_pos_lw'] != 0:
-            self.l_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
+        if self.cfg['rec_joint_pos_w'] != 0:
+            self.loss_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
 
-        if self.cfg['linear_v_lw'] != 0:
-            self.l_rec_linear_v = self.l2_criterion(rec_seq_linear_v, seq_linear_v)
+        if self.cfg['rec_linear_v_w'] != 0:
+            self.loss_rec_linear_v = self.l2_criterion(rec_seq_linear_v, seq_linear_v)
         
-        self.l_rec_rot_6d = self.l2_criterion(rec_seq_rot_6d, seq_rot_6d)
-        self.l_rec_rot_mat = self.l2_criterion(rec_seq_rot_mat, seq_rot_mat)
-        self.l_rec_rot_pos = self.l2_criterion(rec_seq_rot_pos, seq_rot_pos)
+        self.loss_rec_rot_6d = self.l2_criterion(rec_seq_rot_6d, seq_rot_6d)
+        self.loss_rec_rot_mat = self.l2_criterion(rec_seq_rot_mat, seq_rot_mat)
+        self.loss_rec_rot_pos = self.l2_criterion(rec_seq_rot_pos, seq_rot_pos)
 
-        self.l_rec_total = self.cfg['rot_6d_lw'] * self.l_rec_rot_6d + \
-                           self.cfg['rot_mat_lw'] * self.l_rec_rot_mat + \
-                           self.cfg['rot_pos_lw'] * self.l_rec_rot_pos + \
-                           self.cfg['joint_pos_lw'] * self.l_rec_joint_pos + \
-                           self.cfg['linear_v_lw'] * self.l_rec_linear_v
-        self.l_rec_total.bachward()
+        self.loss_rec_total = self.cfg['rec_rot_6d_w'] * self.loss_rec_rot_6d + \
+                           self.cfg['rec_rot_mat_w'] * self.loss_rec_rot_mat + \
+                           self.cfg['rec_rot_pos_w'] * self.loss_rec_rot_pos + \
+                           self.cfg['rec_joint_pos_w'] * self.loss_rec_joint_pos + \
+                           self.cfg['rec_linear_v_w'] * self.loss_rec_linear_v
+        self.loss_rec_total.backward()
         self.opt.step()
 
         info_dict = {
-            'l_rec_total': self.l_rec_total,
-            'l_rec_rot_6d': self.l_rec_rot_6d,
-            'l_rec_rot_mat': self.l_rec_rot_mat,
-            'l_rec_rot_pos': self.l_rec_rot_pos,
-            'l_rec_joint_pos': self.l_rec_joint_pos,
-            'l_rec_linear_v': self.l_rec_linear_v,
-            'l_rec_angular_v': self.l_rec_angular_v,
-            'l_rec_root_v': self.l_rec_root_v,
+            'loss_rec_total': self.loss_rec_total.item(),
+            'loss_rec_rot_6d': self.loss_rec_rot_6d.item(),
+            'loss_rec_rot_mat': self.loss_rec_rot_mat.item(),
+            'loss_rec_rot_pos': self.loss_rec_rot_pos.item(),
+            'loss_rec_joint_pos': self.loss_rec_joint_pos.item(),
+            'loss_rec_linear_v': self.loss_rec_linear_v.item(),
+            'loss_rec_angular_v': self.loss_rec_angular_v.item(),
+            'loss_rec_root_v': self.loss_rec_root_v.item(),
         }
         return info_dict
     
@@ -151,33 +151,31 @@ class MotionVAETrainer(nn.Module):
             
             rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
 
-            if self.cfg['joint_pos_lw'] != 0:
-                self.l_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
+            if self.cfg['rec_joint_pos_w'] != 0:
+                self.loss_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
 
-            if self.cfg['linear_v_lw'] != 0:
-                self.l_rec_linear_v = self.l2_criterion(rec_seq_linear_v, seq_linear_v)
+            if self.cfg['rec_linear_v_w'] != 0:
+                self.loss_rec_linear_v = self.l2_criterion(rec_seq_linear_v, seq_linear_v)
             
-            self.l_rec_rot_6d = self.l2_criterion(rec_seq_rot_6d, seq_rot_6d)
-            self.l_rec_rot_mat = self.l2_criterion(rec_seq_rot_mat, seq_rot_mat)
-            self.l_rec_rot_pos = self.l2_criterion(rec_seq_rot_pos, seq_rot_pos)
+            self.loss_rec_rot_6d = self.l2_criterion(rec_seq_rot_6d, seq_rot_6d)
+            self.loss_rec_rot_mat = self.l2_criterion(rec_seq_rot_mat, seq_rot_mat)
+            self.loss_rec_rot_pos = self.l2_criterion(rec_seq_rot_pos, seq_rot_pos)
 
-            self.l_rec_total = self.cfg['rot_6d_lw'] * self.l_rec_rot_6d + \
-                            self.cfg['rot_mat_lw'] * self.l_rec_rot_mat + \
-                            self.cfg['rot_pos_lw'] * self.l_rec_rot_pos + \
-                            self.cfg['joint_pos_lw'] * self.l_rec_joint_pos + \
-                            self.cfg['linear_v_lw'] * self.l_rec_linear_v
-            self.l_rec_total.bachward()
-            self.opt.step()
+            self.loss_rec_total = self.cfg['rec_rot_6d_w'] * self.loss_rec_rot_6d + \
+                            self.cfg['rec_rot_mat_w'] * self.loss_rec_rot_mat + \
+                            self.cfg['rec_rot_pos_w'] * self.loss_rec_rot_pos + \
+                            self.cfg['rec_joint_pos_w'] * self.loss_rec_joint_pos + \
+                            self.cfg['rec_linear_v_w'] * self.loss_rec_linear_v
 
             info_dict = {
-                'l_rec_total': self.l_rec_total,
-                'l_rec_rot_6d': self.l_rec_rot_6d,
-                'l_rec_rot_mat': self.l_rec_rot_mat,
-                'l_rec_rot_pos': self.l_rec_rot_pos,
-                'l_rec_joint_pos': self.l_rec_joint_pos,
-                'l_rec_linear_v': self.l_rec_linear_v,
-                'l_rec_angular_v': self.l_rec_angular_v,
-                'l_rec_root_v': self.l_rec_root_v,
+                'loss_rec_total': self.loss_rec_total.item(),
+                'loss_rec_rot_6d': self.loss_rec_rot_6d.item(),
+                'loss_rec_rot_mat': self.loss_rec_rot_mat.item(),
+                'loss_rec_rot_pos': self.loss_rec_rot_pos.item(),
+                'loss_rec_joint_pos': self.loss_rec_joint_pos.item(),
+                'loss_rec_linear_v': self.loss_rec_linear_v.item(),
+                'loss_rec_angular_v': self.loss_rec_angular_v.item(),
+                'loss_rec_root_v': self.loss_rec_root_v.item(),
             }
         self.train()
         return info_dict
