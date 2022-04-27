@@ -11,6 +11,7 @@ import shutil
 import argparse
 from torch.utils.tensorboard import SummaryWriter
 import torch.backends.cudnn as cudnn
+import numpy as np
 
 from lib.utils.logs import init_logger
 from lib.utils.common_utils import setup_seed, write_loss
@@ -104,6 +105,40 @@ if __name__ == '__main__':
                         use_lafan=False, 
                         make_translation=False
                     )
+                    gif_path = os.path.join(image_directory, str((iterations+1)), "reconstruct", f'{test_it}.gif')
+                    logger.info(f'{gif_path} saved')
+            
+            # refine vibe
+            if (iterations + 1) % config['refine_vibe_iter'] == 0:
+                logger.info(f'Iteration: {(iterations+1):08d}/{max_iter:08d}, start refine vibe...')
+                vibe_data_dir = config['vibe_data_dir']
+                video_list = config['video_list']
+                for video_name in video_list:
+                    video_basename = os.path.splitext(video_name)[0]
+                    vibe_data_path = os.path.join(vibe_data_dir, video_basename, 'vibe_output.pkl')
+                    concat_seq_cmp, refined_rot_mat, vibe_rot_mat = trainer.refine_vibe(vibe_data_path=vibe_data_path)
+                    logger.info(f'finish refine {video_basename}, start visualize')
+                    show3Dpose_animation_multiple(
+                        channels=concat_seq_cmp.data.cpu().numpy(), 
+                        image_directory=image_directory, 
+                        iterations=(iterations+1), 
+                        tag="refined_gif", 
+                        bs_idx=video_basename, 
+                        use_joint12=False, 
+                        use_amass=True, 
+                        use_lafan=False, 
+                        make_translation=False
+                    )
+                    gif_path = os.path.join(image_directory, str((iterations+1)), "refined_gif", f'{video_basename}.gif')
+                    logger.info(f'{gif_path} saved')
+                    dst_dir = os.path.join(image_directory, str((iterations+1)), 'refined_rot_mat')
+                    os.makedirs(dst_dir, exist_ok=True)
+                    dst_refined_rot_npy_path = os.path.join(dst_dir, f'refined_{video_basename}_rot_mat.npy')
+                    np.save(dst_refined_rot_npy_path, refined_rot_mat.data.cpu().numpy())
+                    logger.info(f'{dst_refined_rot_npy_path} saved')
+                    dst_vibe_rot_npy_path = os.path.join(dst_dir, f'vibe_{video_basename}_rot_mat.npy')
+                    np.save(dst_vibe_rot_npy_path, vibe_rot_mat.data.cpu().numpy())
+                    logger.info(f'{dst_vibe_rot_npy_path} saved')
 
             if (iterations + 1) % config['log_iter'] == 0:
                 write_loss(iterations, trainer, train_writer)
@@ -116,3 +151,4 @@ if __name__ == '__main__':
             if iterations >= max_iter:
                 logger.info(f'Iteration: {(iterations+1):08d}/{max_iter:08d}, Finish!')
                 sys.exit(0)
+            trainer.update_learning_rate()
