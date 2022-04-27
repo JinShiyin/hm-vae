@@ -21,23 +21,33 @@ def main():
     # ]
     refine_data_info_list = [
         {
-            'refined_data_path': 'outputs/test/refine_vibe/20220425-152931-downtown_walkUphill_00/1_our_rot_mat.npy',
-            'vibe_data_path': 'outputs/test/refine_vibe/20220425-152931-downtown_walkUphill_00/1_vibe_rot_mat.npy',
+            'refined_data_path': 'outputs/test/refine_vibe/20220427-210933-sample_video/1_our_rot_mat.npy',
+            'vibe_data_path': 'outputs/test/refine_vibe/20220427-210933-sample_video/1_vibe_rot_mat.npy',
+            'video_name': 'sample_video.mp4',
+        },
+        {
+            'refined_data_path': 'outputs/test/refine_vibe/20220427-210022-hiphop_clip1/1_our_rot_mat.npy',
+            'vibe_data_path': 'outputs/test/refine_vibe/20220427-210022-hiphop_clip1/1_vibe_rot_mat.npy',
+            'video_name': 'hiphop_clip1.mp4',
+        },
+        {
+            'refined_data_path': 'outputs/test/refine_vibe/20220427-210612-downtown_walkUphill_00/1_our_rot_mat.npy',
+            'vibe_data_path': 'outputs/test/refine_vibe/20220427-210612-downtown_walkUphill_00/1_vibe_rot_mat.npy',
             'video_name': 'downtown_walkUphill_00.mp4',
         },
         {
-            'refined_data_path': 'outputs/test/refine_vibe/20220425-180533-outdoors_fencing_01/1_our_rot_mat.npy',
-            'vibe_data_path': 'outputs/test/refine_vibe/20220425-180533-outdoors_fencing_01/1_vibe_rot_mat.npy',
+            'refined_data_path': 'outputs/test/refine_vibe/20220427-205614-outdoors_fencing_01/1_our_rot_mat.npy', # seq-len=16
+            'vibe_data_path': 'outputs/test/refine_vibe/20220427-205614-outdoors_fencing_01/1_our_rot_mat.npy',
             'video_name': 'outdoors_fencing_01.mp4',
         },
         {
-            'refined_data_path': 'outputs/test/refine_vibe/20220425-181145-outdoors_freestyle_01/1_our_rot_mat.npy',
-            'vibe_data_path': 'outputs/test/refine_vibe/20220425-181145-outdoors_freestyle_01/1_vibe_rot_mat.npy',
+            'refined_data_path': 'outputs/test/refine_vibe/20220427-210212-outdoors_freestyle_01/1_our_rot_mat.npy',
+            'vibe_data_path': 'outputs/test/refine_vibe/20220427-210212-outdoors_freestyle_01/1_vibe_rot_mat.npy',
             'video_name': 'outdoors_freestyle_01.mp4',
         },
         {
-            'refined_data_path': 'outputs/test/refine_vibe/20220425-181356-downtown_weeklyMarket_00/1_our_rot_mat.npy',
-            'vibe_data_path': 'outputs/test/refine_vibe/20220425-181356-downtown_weeklyMarket_00/1_vibe_rot_mat.npy',
+            'refined_data_path': 'outputs/test/refine_vibe/20220427-211216-downtown_weeklyMarket_00/1_our_rot_mat.npy',
+            'vibe_data_path': 'outputs/test/refine_vibe/20220427-211216-downtown_weeklyMarket_00/1_vibe_rot_mat.npy',
             'video_name': 'downtown_weeklyMarket_00.mp4',
         },
     ]
@@ -45,7 +55,7 @@ def main():
     use_vibe_cam = False
     use_ori_img = False
     resolution = 1280
-    is_render_refined = False
+    is_render_refined = True # True->refined, False->vibe
     render_flag = 'refined' if is_render_refined else 'vibe'
     for refine_data_info in refine_data_info_list:
         if is_render_refined:
