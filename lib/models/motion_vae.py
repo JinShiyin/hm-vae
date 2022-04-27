@@ -36,8 +36,8 @@ class MotionVAE(nn.Module):
         return {*} rec_seq_rot_6d: bs X T X (24*6)
         '''
         offset = None
-        seq_rot_6d = seq_rot_6d.transpose(0, 2, 1)  # bs X (24*6) X T
+        seq_rot_6d = seq_rot_6d.transpose(2, 1)  # bs X (24*6) X T
         latent = self.enc(seq_rot_6d, offset)
         rec_seq_rot_6d = self.dec(latent, offset)  # bs X (24*6) X T
-        rec_seq_rot_6d = rec_seq_rot_6d.transpose(0, 2, 1)  # bs X T X (24*6)
+        rec_seq_rot_6d = rec_seq_rot_6d.transpose(2, 1)  # bs X T X (24*6)
         return rec_seq_rot_6d
