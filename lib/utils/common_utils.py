@@ -43,6 +43,15 @@ def create_sub_folders(output_path, if_test=False):
         return log_dir, checkpoint_dir, image_dir
 
 
+def init_config(config_path):
+    config = get_config(config_path)
+    exp_name = config['exp_name']
+    output_dir = config['output_dir']
+    time_stamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+    config['output_dir'] = os.path.join(output_dir, exp_name, f'{time_stamp}-{exp_name}')
+    return config
+
+
 def get_config(config):
     with open(config, 'r') as stream:
         return yaml.safe_load(stream)
