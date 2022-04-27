@@ -239,4 +239,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # read_data(args.dir, all_sequences, args.dest_folder)
-    read_data(args.dir, all_sequences, args.dest_folder, fps=30)
+    # read_data(args.dir, all_sequences, args.dest_folder, fps=30)
+    read_data(args.dir, all_sequences, args.dest_folder)
