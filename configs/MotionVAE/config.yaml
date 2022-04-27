@@ -1,0 +1,59 @@
+# experiment options
+output_dir: outputs/train
+exp_name: len_64_no_aug_mvae
+
+# logger options
+max_iter: 500000              # maximum number of training iterations
+validation_iter: 10000
+visualize_iter: 10000       # How often do you want to save output images during training
+snapshot_save_iter: 10000      # How often do you want to save trained models
+log_iter: 20                   # How often do you want to log the training stats
+
+# optimization options
+weight_decay: 0.0001          # weight decay
+lr: 0.0001                # learning rate for the generator
+lr_policy: step
+step_size: 100000
+gamma: 0.3
+init: kaiming                 # initialization [gaussian/kaiming/xavier/orthogonal]
+
+# loss weight
+rec_rot_6d_w: 1
+rec_rot_mat_w: 1
+rec_rot_pos_w: 10
+rec_joint_pos_w: 0
+rec_root_v_w: 0
+rec_linear_v_w: 0
+rec_angular_v_w: 0
+# kl_w: 0.003
+
+# dataloader
+train_batch_size: 128
+val_batch_size: 128
+test_batch_size: 1
+num_workers: 4
+
+# model options
+train_seq_len: 64
+kernel_size: 15
+latent_d: 24
+n_joints: 24    
+num_layers: 4          
+extra_conv: 0
+skeleton_dist: 2
+skeleton_pool: mean
+padding_mode: reflection
+upsampling: linear
+
+# dataset options
+fps_aug_flag: False
+random_root_rot_flag: False
+use_30fps_data: True
+rot_npy_folder_30fps: /data/jsy/datasets/AMASS/amass_for_hm_vae_fps30
+rot_npy_folder_all: /data/jsy/datasets/AMASS/amass_for_hm_vae_all
+train_json_file: data/for_all_data_motion_model/train_all_amass_motion_data.json
+val_json_file: data/for_all_data_motion_model/val_all_amass_motion_data.json
+test_json_file: data/for_all_data_motion_model/test_all_amass_motion_data.json
+mean_std_path: data/for_all_data_motion_model/all_amass_data_mean_std.npy
+
+parent_json_file: utils/data/joint24_parents.json
