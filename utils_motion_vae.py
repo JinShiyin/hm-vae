@@ -191,44 +191,38 @@ class MotionSeqData(data.Dataset):
         return len(self.ids)
 
 def get_train_loaders_all_data_seq(cfg):
-    # root_folder = "utils/data"
-    root_folder = "data"
-  
-    data_folder = os.path.join(root_folder, "for_all_data_motion_model")
 
     if cfg['use_30fps_data']:
-        # rot_npy_folder = os.path.join("/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30")
-        rot_npy_folder = "/data/jsy/datasets/AMASS/amass_for_hm_vae_fps30"
+        rot_npy_folder = cfg['rot_npy_folder_30fps']
     else:
-        rot_npy_folder = "/data/jsy/datasets/AMASS/decompress"
+        rot_npy_folder = cfg['rot_npy_folder_all']
     
-    mean_std_path = os.path.join(data_folder, "all_amass_data_mean_std.npy")
+    mean_std_path = cfg['mean_std_path']
 
-    train_json_file = os.path.join(data_folder, "train_all_amass_motion_data.json")
-    val_json_file = os.path.join(data_folder, "val_all_amass_motion_data.json")
-  
-    batch_size = cfg['batch_size'] 
+    train_json_file = cfg['train_json_file']
+    val_json_file = cfg['val_json_file']
+    test_json_file = cfg['test_json_file']
 
-    workers = 1
+    workers = cfg['num_workers']
     fps_aug_flag = cfg['fps_aug_flag']
     random_root_rot_flag = cfg['random_root_rot_flag']
 
     train_dataset = MotionSeqData(rot_npy_folder, train_json_file, mean_std_path, cfg, \
         fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True,
+        train_dataset, batch_size=cfg['train_batch_size'], shuffle=True,
         num_workers=workers, pin_memory=True, drop_last=True)
 
     val_dataset = MotionSeqData(rot_npy_folder, val_json_file, mean_std_path, cfg, \
         fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
     val_loader = torch.utils.data.DataLoader(
-        val_dataset, batch_size=batch_size, shuffle=False,
+        val_dataset, batch_size=cfg['val_batch_size'], shuffle=False,
         num_workers=workers, pin_memory=True, drop_last=True)
 
-    test_dataset = MotionSeqData(rot_npy_folder, val_json_file, mean_std_path, cfg, \
+    test_dataset = MotionSeqData(rot_npy_folder, test_json_file, mean_std_path, cfg, \
         fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
     test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=True,
+        test_dataset, batch_size=cfg['test_batch_size'], shuffle=True,
         num_workers=workers, pin_memory=True, drop_last=True)
 
     return (train_loader, val_loader, test_loader)
