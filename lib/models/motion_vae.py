@@ -4,7 +4,6 @@ Author: JinShiyin
 Email: shiyinjin@foxmail.com
 Date: 2022-04-26 21:45:40
 '''
-import torch
 import torch.nn as nn
 from dotmap import DotMap
 from skeleton import get_edges
@@ -41,17 +40,4 @@ class MotionVAE(nn.Module):
         latent = self.enc(seq_rot_6d, offset)
         rec_seq_rot_6d = self.dec(latent, offset)  # bs X (24*6) X T
         rec_seq_rot_6d = rec_seq_rot_6d.transpose(0, 2, 1)  # bs X T X (24*6)
-        return rec_seq_rot_6d
-
-    def test(self, seq_rot_6d):
-        '''
-        description: 
-        param {*} self
-        param {*} seq_rot_6d: bs X T X (24*6)
-        return {*} rec_seq_rot_6d: bs X T X (24*6)
-        '''
-        self.eval()
-        with torch.no_grad():
-            rec_seq_rot_6d = self.forward(seq_rot_6d)
-        self.train()
         return rec_seq_rot_6d
