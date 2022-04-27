@@ -10,6 +10,8 @@ from lib.utils.merge_video_utils import merge_videos
 
 def test():
     video_name_list = [
+        'sample_video.mp4',
+        'hiphop_clip1.mp4',
         'downtown_walkUphill_00.mp4', 
         'outdoors_fencing_01.mp4', 
         'outdoors_freestyle_01.mp4', 
