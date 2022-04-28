@@ -5,6 +5,8 @@ Email: shiyinjin@foxmail.com
 Date: 2022-04-26 21:56:17
 '''
 import os
+os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+
 import sys
 import time
 import torch
