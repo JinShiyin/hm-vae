@@ -33,10 +33,10 @@ shallow_kl_w: 0.003
 iteration_interval: 50000
 
 # dataloader
-train_batch_size: 128
+train_batch_size: 512
 val_batch_size: 128
 test_batch_size: 1
-num_workers: 4
+num_workers: 2
 
 # model options
 train_seq_len: 16
