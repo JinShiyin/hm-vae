@@ -20,6 +20,7 @@ kl_w: 0.003
 shallow_kl_w: 0.003
 pre_kl_w: 0.0003
 validation_iter: 500
+num_workers: 4
 
 iteration_interval: 50000
 
