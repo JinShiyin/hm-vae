@@ -67,15 +67,45 @@ import numpy as np
 
 
 # ############################## generate 3dpw videos ###################
-from lib.utils.demo_utils import images_to_video
-import os
+# from lib.utils.demo_utils import images_to_video
+# import os
 
-img_root = '/data/jsy/datasets/3DPW/imageFiles'
-img_folder_name_list = os.listdir(img_root)
-out_dir = '/data/jsy/datasets/3DPW/videos'
-image_name_pattern = f'image_%05d.jpg'
-for img_folder_name in img_folder_name_list:
-    img_folder = os.path.join(img_root, img_folder_name)
-    out_video_path = os.path.join(out_dir, f'{img_folder_name}.mp4')
-    images_to_video(img_folder, out_video_path, image_name_pattern)
+# img_root = '/data/jsy/datasets/3DPW/imageFiles'
+# img_folder_name_list = os.listdir(img_root)
+# out_dir = '/data/jsy/datasets/3DPW/videos'
+# image_name_pattern = f'image_%05d.jpg'
+# for img_folder_name in img_folder_name_list:
+#     img_folder = os.path.join(img_root, img_folder_name)
+#     out_video_path = os.path.join(out_dir, f'{img_folder_name}.mp4')
+#     images_to_video(img_folder, out_video_path, image_name_pattern)
+
+def process1(logger):
+    print(f'process1')
+    logger.info(f'process1')
+
+def process2(logger):
+    print(f'process2')
+    logger.info(f'process2')
+
+
+if __name__ == '__main__':
+    # from torch.multiprocessing import Process, set_start_method
+    # set_start_method('spawn')
+
+    from multiprocessing import Process
+
+    from lib.utils.logs import init_logger
+
+    logger = init_logger(log_name='test', log_dir='/data/jsy/code/hm-vae/outputs/test/tmp')
+
+    logger.info(f'main process')
+
+    p = Process(target=process1, args=(logger,))
+    p.start()
+
+    p = Process(target=process2, args=(logger,))
+    p.start()
+
+
+
 
