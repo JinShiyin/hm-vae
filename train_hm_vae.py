@@ -72,7 +72,7 @@ if __name__ == '__main__':
         for it, input_data in enumerate(train_dataset):
             for i in range(len(input_data)):
                 input_data[i] = input_data[i].float().cuda()
-            loss_info  = trainer.update(input_data)
+            loss_info  = trainer.update(input_data, config, iterations+1)
             if (iterations + 1) % config['log_iter'] == 0:
                 content = f"Iteration: {(iterations+1):08d}/{max_iter:08d}"
                 for key, val in loss_info.items():
@@ -86,7 +86,7 @@ if __name__ == '__main__':
                         val_input_data[i] = val_input_data[i].float().cuda()
                     if val_it >= 50:
                         break
-                    loss_info = trainer.validate(val_input_data)
+                    loss_info = trainer.validate(val_input_data, config, iterations+1)
                     content = f"Val Iteration: {(iterations+1):08d}/{max_iter:08d}"
                     for key, val in loss_info.items():
                         content += f', {key}={val:.6f}'
@@ -187,7 +187,6 @@ if __name__ == '__main__':
                     args=(config, refined_rot_mat_dir, output_dir, logger,)
                 )
                 p.start()
-
 
             if (iterations + 1) % config['log_iter'] == 0:
                 write_loss(iterations, trainer, train_writer)

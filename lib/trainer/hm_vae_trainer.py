@@ -56,17 +56,19 @@ class HMVAETrainer(nn.Module):
         self.loss_rec_total = torch.zeros(1).cuda()
         self.loss_kl = torch.zeros(1).cuda()
     
-    def forward(self, seq_rot_6d):
+    def forward(self, seq_rot_6d, hp, iterations):
         '''
         description: 
         param {*} self
         param {*} seq_rot_6d: bs X T X (24*6)
+        param {*} hp
+        param {*} iterations
         return {*}
         '''
         bs, timesteps, _ = seq_rot_6d.size() # bs X T X (24*6)
         n_joints = self.cfg['n_joints']
         # get rec_rot_6d
-        rec_seq_rot_6d, loss_kl = self.model(seq_rot_6d) # bs X T X (24*6)
+        rec_seq_rot_6d, loss_kl = self.model(seq_rot_6d, hp, iterations) # bs X T X (24*6)
         rec_seq_rot_mat = hmvae_rot6d_to_rotmat(rec_seq_rot_6d.view(bs, timesteps, n_joints, 6)) # bs X T X 24 X 3 X 3
         rec_seq_rot_mat = rec_seq_rot_mat.view(-1, n_joints, 3, 3) # (bs*T) X 24 X 3 X 3
         rec_seq_rot_pos = self.fk_layer(rec_seq_rot_mat) # (bs*T) X 24 X 3
@@ -134,11 +136,11 @@ class HMVAETrainer(nn.Module):
         return seq_rot_pos
 
 
-    def update(self, data):
+    def update(self, data, hp, iterations):
         self.opt.zero_grad()
         seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_joint_pos, seq_linear_v, seq_angular_v, seq_root_v = data
         
-        rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v, loss_kl = self.forward(seq_rot_6d)
+        rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v, loss_kl = self.forward(seq_rot_6d, hp, iterations)
 
         self.loss_kl = loss_kl
 
@@ -174,12 +176,12 @@ class HMVAETrainer(nn.Module):
         }
         return info_dict
     
-    def validate(self, data):
+    def validate(self, data, hp, iterations):
         self.eval()
         with torch.no_grad():
             seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_joint_pos, seq_linear_v, seq_angular_v, seq_root_v = data
             
-            rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v, loss_kl = self.forward(seq_rot_6d)
+            rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v, loss_kl = self.forward(seq_rot_6d, hp, iterations)
             self.loss_kl = loss_kl
 
             if self.cfg['rec_joint_pos_w'] != 0:

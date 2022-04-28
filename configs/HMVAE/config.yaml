@@ -39,8 +39,8 @@ test_batch_size: 1
 num_workers: 4
 
 # model options
-train_seq_len: 64
-kernel_size: 15
+train_seq_len: 16
+kernel_size: 5
 latent_d: 24
 shallow_latent_d: 12
 input_dim: 6
