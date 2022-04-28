@@ -217,13 +217,13 @@ def get_train_loaders_all_data_seq(cfg):
         fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=cfg['val_batch_size'], shuffle=False,
-        num_workers=workers, pin_memory=True, drop_last=True)
+        num_workers=1, pin_memory=True, drop_last=True)
 
     test_dataset = MotionSeqData(rot_npy_folder, test_json_file, mean_std_path, cfg, \
         fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=cfg['test_batch_size'], shuffle=True,
-        num_workers=workers, pin_memory=True, drop_last=True)
+        num_workers=1, pin_memory=True, drop_last=True)
 
     return (train_loader, val_loader, test_loader)
 
