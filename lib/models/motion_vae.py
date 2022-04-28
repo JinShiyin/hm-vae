@@ -6,7 +6,7 @@ Date: 2022-04-26 21:45:40
 '''
 import torch.nn as nn
 from dotmap import DotMap
-from skeleton import get_edges
+from lib.models.skeleton import get_edges
 from lib.models.base_models import Encoder, Decoder
 
 
