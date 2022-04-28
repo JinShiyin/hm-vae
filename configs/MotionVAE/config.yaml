@@ -8,7 +8,7 @@ validation_iter: 20000
 visualize_iter: 20000       # How often do you want to save output images during training
 snapshot_save_iter: 20000      # How often do you want to save trained models
 refine_vibe_iter: 20000
-log_iter: 1000                   # How often do you want to log the training stats
+log_iter: 20                   # How often do you want to log the training stats
 
 # optimization options
 weight_decay: 0.0001          # weight decay
@@ -67,3 +67,7 @@ video_list:
   - outdoors_fencing_01.mp4
   - outdoors_freestyle_01.mp4
   - downtown_weeklyMarket_00.mp4
+
+# render
+tmp_rendered_image_folder: "" # ouput_dir/tmp
+resolution: [1280, 1280]
