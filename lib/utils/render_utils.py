@@ -6,6 +6,7 @@ Date: 2022-04-28 14:32:00
 '''
 import os
 os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+
 import cv2
 import time
 import torch
@@ -31,7 +32,8 @@ def render_result_without_origin_video(rendered_image_folder, output_video_path,
     param {*} resolution: (width, height) 
     return {*}
     '''
-
+    os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+    
     # set renderer
     renderer = Renderer(resolution=resolution, orig_img=False)
 
