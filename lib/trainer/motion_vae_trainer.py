@@ -10,8 +10,8 @@ import joblib
 import numpy as np
 import torch.nn as nn
 import torchgeometry as tgm
-from fk_layer import ForwardKinematicsLayer
 from lib.models.motion_vae import MotionVAE
+from lib.models.fk_layer import ForwardKinematicsLayer
 from lib.utils.common_utils import get_model_list, get_scheduler, weights_init
 from lib.utils.conversion_utils import amass_pose_to_smpl_pose, smpl_pose_to_amass_pose
 from lib.utils.rotation_utils import hmvae_rot6d_to_rotmat, rotmat_to_rot6d
