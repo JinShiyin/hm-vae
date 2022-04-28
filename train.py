@@ -6,9 +6,12 @@ Date: 2022-04-26 21:56:17
 '''
 import os
 import sys
+import time
 import torch
 import shutil
 import argparse
+from torch.multiprocessing import set_start_method
+from multiprocessing import Process
 from torch.utils.tensorboard import SummaryWriter
 import torch.backends.cudnn as cudnn
 import numpy as np
@@ -16,14 +19,16 @@ import numpy as np
 from lib.utils.logs import init_logger
 from lib.utils.common_utils import setup_seed, write_loss
 from utils_motion_vae import get_train_loaders_all_data_seq
-from utils_common import show3Dpose_animation_multiple
 from lib.utils.common_utils import init_config, create_sub_folders
+from lib.utils.render_utils import render_multi_refined_rot_mat, show3d_multi_refined_rot_pos
 from lib.trainer.motion_vae_trainer import MotionVAETrainer
 
 
 if __name__ == '__main__':
     # Enable auto-tuner to find the best algorithm to use for your hardware.
     cudnn.benchmark = True
+
+    set_start_method('spawn')
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default='', help='configuration file for training and testing')
@@ -79,10 +84,15 @@ if __name__ == '__main__':
                     for key, val in loss_info.items():
                         content += f', {key}={val:.6f}'
                     logger.info(content)
+                    torch.cuda.empty_cache()
             
             # Visulization
             if (iterations + 1) % config['visualize_iter'] == 0:
                 logger.info(f'Iteration: {(iterations+1):08d}/{max_iter:08d}, start visulization...')
+
+                reconstruct_rot_pos_dir = os.path.join(image_directory, str((iterations+1)), 'reconstruct_rot_pos')
+                os.makedirs(reconstruct_rot_pos_dir, exist_ok=True)
+
                 for test_it, test_input_data in enumerate(test_dataset):
                     for i in range(len(test_input_data)):
                         test_input_data[i] = test_input_data[i].float().cuda()
@@ -94,51 +104,66 @@ if __name__ == '__main__':
                     seq_rot_pos = seq_rot_pos[0].view(1, timesteps, 24, 3)
                     rec_seq_rot_pos = rec_seq_rot_pos[0].view(1, timesteps, 24, 3)
                     concat_seq_cmp = torch.cat([seq_rot_pos, rec_seq_rot_pos], dim=0)
-                    show3Dpose_animation_multiple(
-                        channels=concat_seq_cmp.data.cpu().numpy(), 
-                        image_directory=image_directory, 
-                        iterations=(iterations+1), 
-                        tag="reconstruct", 
-                        bs_idx=test_it, 
-                        use_joint12=False, 
-                        use_amass=True, 
-                        use_lafan=False, 
-                        make_translation=False
-                    )
-                    gif_path = os.path.join(image_directory, str((iterations+1)), "reconstruct", f'{test_it}.gif')
-                    logger.info(f'{gif_path} saved')
-            
+
+                    # save concat_seq_cmp
+                    dst_reconstruct_rot_pos_path = os.path.join(reconstruct_rot_pos_dir, f'{test_it}.npy')
+                    np.save(dst_reconstruct_rot_pos_path, concat_seq_cmp.data.cpu().numpy())
+                    logger.info(f'{dst_reconstruct_rot_pos_path} saved')
+                    torch.cuda.empty_cache()
+                
+                # start show3d process
+                p = Process(
+                    target=show3d_multi_refined_rot_pos,
+                    args=(config, reconstruct_rot_pos_dir, image_directory, iterations, 'reconstruct_gif', logger)
+                )
+                p.start()
+
             # refine vibe
             if (iterations + 1) % config['refine_vibe_iter'] == 0:
                 logger.info(f'Iteration: {(iterations+1):08d}/{max_iter:08d}, start refine vibe...')
                 vibe_data_dir = config['vibe_data_dir']
                 video_list = config['video_list']
+
+                refined_rot_pos_dir = os.path.join(image_directory, str((iterations+1)), 'refined_rot_pos')
+                os.makedirs(refined_rot_pos_dir, exist_ok=True)
+                refined_rot_mat_dir = os.path.join(image_directory, str((iterations+1)), 'refined_rot_mat')
+                os.makedirs(refined_rot_mat_dir, exist_ok=True)
+
                 for video_name in video_list:
                     video_basename = os.path.splitext(video_name)[0]
                     vibe_data_path = os.path.join(vibe_data_dir, video_basename, 'vibe_output.pkl')
                     concat_seq_cmp, refined_rot_mat, vibe_rot_mat = trainer.refine_vibe(vibe_data_path=vibe_data_path)
-                    logger.info(f'finish refine {video_basename}, start visualize')
-                    show3Dpose_animation_multiple(
-                        channels=concat_seq_cmp.data.cpu().numpy(), 
-                        image_directory=image_directory, 
-                        iterations=(iterations+1), 
-                        tag="refined_gif", 
-                        bs_idx=video_basename, 
-                        use_joint12=False, 
-                        use_amass=True, 
-                        use_lafan=False, 
-                        make_translation=False
-                    )
-                    gif_path = os.path.join(image_directory, str((iterations+1)), "refined_gif", f'{video_basename}.gif')
-                    logger.info(f'{gif_path} saved')
-                    dst_dir = os.path.join(image_directory, str((iterations+1)), 'refined_rot_mat')
-                    os.makedirs(dst_dir, exist_ok=True)
-                    dst_refined_rot_npy_path = os.path.join(dst_dir, f'refined_{video_basename}_rot_mat.npy')
+                    # save concat_seq_cmp
+                    dst_refined_rot_pos_path = os.path.join(refined_rot_pos_dir, f'{video_basename}.npy')
+                    np.save(dst_refined_rot_pos_path, concat_seq_cmp.data.cpu().numpy())
+                    logger.info(f'{dst_refined_rot_pos_path} saved')
+                    
+                    # save refined_rot_mat
+                    dst_refined_rot_npy_path = os.path.join(refined_rot_mat_dir, f'refined_{video_basename}_rot_mat.npy')
                     np.save(dst_refined_rot_npy_path, refined_rot_mat.data.cpu().numpy())
                     logger.info(f'{dst_refined_rot_npy_path} saved')
-                    dst_vibe_rot_npy_path = os.path.join(dst_dir, f'vibe_{video_basename}_rot_mat.npy')
+
+                    # save vibe_rot_mat
+                    dst_vibe_rot_npy_path = os.path.join(refined_rot_mat_dir, f'vibe_{video_basename}_rot_mat.npy')
                     np.save(dst_vibe_rot_npy_path, vibe_rot_mat.data.cpu().numpy())
                     logger.info(f'{dst_vibe_rot_npy_path} saved')
+                    torch.cuda.empty_cache()
+                
+                # start show3d process
+                p = Process(
+                    target=show3d_multi_refined_rot_pos,
+                    args=(config, refined_rot_pos_dir, image_directory, iterations, 'refined_gif', logger)
+                )
+                p.start()
+
+                # start render process
+                output_dir = os.path.join(image_directory, f'{iterations+1}', 'refined_video')
+                p = Process(
+                    target=render_multi_refined_rot_mat,
+                    args=(config, refined_rot_mat_dir, output_dir, logger,)
+                )
+                p.start()
+
 
             if (iterations + 1) % config['log_iter'] == 0:
                 write_loss(iterations, trainer, train_writer)
