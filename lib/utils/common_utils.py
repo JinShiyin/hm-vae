@@ -49,6 +49,7 @@ def init_config(config_path):
     output_dir = config['output_dir']
     time_stamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
     config['output_dir'] = os.path.join(output_dir, exp_name, f'{time_stamp}-{exp_name}')
+    config['tmp_rendered_image_folder'] = os.path.join(config['output_dir'], f'tmp')
     return config
 
 
