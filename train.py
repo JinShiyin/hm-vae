@@ -23,7 +23,7 @@ from lib.utils.common_utils import setup_seed, write_loss
 from utils_motion_vae import get_train_loaders_all_data_seq
 from lib.utils.common_utils import init_config, create_sub_folders
 from lib.utils.render_utils import render_multi_refined_rot_mat, show3d_multi_refined_rot_pos
-from lib.trainer.motion_vae_trainer import MotionVAETrainer
+from lib.trainer.motion_ae_trainer import MotionAETrainer
 
 
 if __name__ == '__main__':
@@ -33,7 +33,7 @@ if __name__ == '__main__':
     set_start_method('spawn')
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='', help='configuration file for training and testing')
+    parser.add_argument('--config', type=str, default='configs/MAE/config.yaml', help='configuration file for training and testing')
     parser.add_argument("--resume", action="store_true")
     args = parser.parse_args()
 
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         shutil.copyfile(args.config, os.path.join(output_dir, 'config.yaml'))
     train_writer = SummaryWriter(log_dir)
 
-    trainer = MotionVAETrainer(config, logger)
+    trainer = MotionAETrainer(config, logger)
     trainer.cuda()
     iterations = trainer.resume(checkpoint_directory) if args.resume else 0
 

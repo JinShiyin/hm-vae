@@ -10,9 +10,9 @@ from lib.models.skeleton import get_edges
 from lib.models.base_models import Encoder, Decoder
 
 
-class MotionVAE(nn.Module):
+class MotionAE(nn.Module):
     def __init__(self, hp):
-        super(MotionVAE, self).__init__()
+        super(MotionAE, self).__init__()
 
         self.hp = hp
         parent_json = hp['parent_json_file']

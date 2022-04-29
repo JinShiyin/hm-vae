@@ -10,19 +10,19 @@ import joblib
 import numpy as np
 import torch.nn as nn
 import torchgeometry as tgm
-from lib.models.motion_vae import MotionVAE
+from lib.models.motion_ae import MotionAE
 from lib.models.fk_layer import ForwardKinematicsLayer
 from lib.utils.common_utils import get_model_list, get_scheduler, weights_init
 from lib.utils.conversion_utils import amass_pose_to_smpl_pose, smpl_pose_to_amass_pose
 from lib.utils.rotation_utils import hmvae_rot6d_to_rotmat, rotmat_to_rot6d
 
 
-class MotionVAETrainer(nn.Module):
+class MotionAETrainer(nn.Module):
     def __init__(self, cfg, logger):
-        super(MotionVAETrainer, self).__init__()
+        super(MotionAETrainer, self).__init__()
         self.cfg = cfg
         self.logger = logger
-        self.model = MotionVAE(cfg)
+        self.model = MotionAE(cfg)
         self.fk_layer = ForwardKinematicsLayer()
 
         self.logger.info('Fix the parameters in fk layer')
