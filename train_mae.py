@@ -5,6 +5,9 @@ Email: shiyinjin@foxmail.com
 Date: 2022-04-26 21:56:17
 '''
 import os
+from lib.models.fk_layer import ForwardKinematicsLayer
+
+from lib.utils.conversion_utils import convert_to_input
 os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
 
 import sys
@@ -20,7 +23,7 @@ import numpy as np
 
 from lib.utils.logs import init_logger
 from lib.utils.common_utils import setup_seed, write_loss
-from utils_motion_vae import get_train_loaders_all_data_seq
+from lib.datasets.amass import get_all_loaders
 from lib.utils.common_utils import init_config, create_sub_folders
 from lib.utils.render_utils import render_multi_refined_rot_mat, show3d_multi_refined_rot_pos
 from lib.trainer.motion_ae_trainer import MotionAETrainer
@@ -53,20 +56,26 @@ if __name__ == '__main__':
     trainer.cuda()
     iterations = trainer.resume(checkpoint_directory) if args.resume else 0
 
-    data_loaders = get_train_loaders_all_data_seq(config)
+    logger.info(f'Start load amass data')
+    data_loaders = get_all_loaders(config, logger)
+    logger.info(f'Finish load amass data')
     train_loader = data_loaders[0]
     val_loader = data_loaders[1]
     test_loader = data_loaders[2]
 
     epoch = 0
     while True:
-        epoch += 1
+        epoch+=1
         train_dataset = train_loader
         val_dataset = val_loader
         test_dataset = test_loader
+        len_train = len(train_dataset)
+        len_val = len(val_dataset)
+        len_test = len(test_dataset)
+
+        #  train
         for it, input_data in enumerate(train_dataset):
-            for i in range(len(input_data)):
-                input_data[i] = input_data[i].float().cuda()
+            input_data = input_data.cuda() # bs X T X 75
             loss_info  = trainer.update(input_data)
             if (iterations + 1) % config['log_iter'] == 0:
                 content = f"Iteration: {(iterations+1):08d}/{max_iter:08d}"
@@ -74,11 +83,11 @@ if __name__ == '__main__':
                     content += f', {key}={val:.6f}'
                 logger.info(content)
 
-            # Check loss in validation set
+            #  Check loss in validation set
             if (iterations + 1) % config['validation_iter'] == 0:
+                logger.info(f'Start Validation...')
                 for val_it, val_input_data in enumerate(val_dataset):
-                    for i in range(len(val_input_data)):
-                        val_input_data[i] = val_input_data[i].float().cuda()
+                    val_input_data = val_input_data.cuda() # bs X T X 75
                     if val_it >= 50:
                         break
                     loss_info = trainer.validate(val_input_data)
@@ -96,11 +105,11 @@ if __name__ == '__main__':
                 os.makedirs(reconstruct_rot_pos_dir, exist_ok=True)
 
                 for test_it, test_input_data in enumerate(test_dataset):
-                    for i in range(len(test_input_data)):
-                        test_input_data[i] = test_input_data[i].float().cuda()
+                    logger.info(content)
+                    test_input_data = test_input_data.cuda()
                     if test_it >= 10:
                         break
-                    seq_rot_6d, seq_rot_mat, seq_rot_pos, _, _, _, _ = test_input_data
+                    seq_rot_6d, seq_rot_mat, seq_rot_pos, _, _, _ = convert_to_input(test_input_data, trainer.fk_layer, None)
                     rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos = trainer.visualize(seq_rot_6d)
                     bs, timesteps, _ = seq_rot_6d.size()
                     seq_rot_pos = seq_rot_pos[0].view(1, timesteps, 24, 3)
@@ -122,7 +131,7 @@ if __name__ == '__main__':
 
             # refine vibe
             if (iterations + 1) % config['refine_vibe_iter'] == 0:
-                logger.info(f'Iteration: {(iterations+1):08d}/{max_iter:08d}, start refine vibe...')
+                logger.info(f'Start refine vibe...')
                 vibe_data_dir = config['vibe_data_dir']
                 video_list = config['video_list']
 
@@ -168,7 +177,7 @@ if __name__ == '__main__':
 
 
             if (iterations + 1) % config['log_iter'] == 0:
-                write_loss(iterations, trainer, train_writer)
+                    write_loss(iterations, trainer, train_writer)
 
             if (iterations + 1) % config['snapshot_save_iter'] == 0:
                 trainer.save(checkpoint_directory, iterations)

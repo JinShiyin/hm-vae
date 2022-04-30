@@ -2,6 +2,7 @@ import os
 import numpy as np 
 import json 
 import random 
+from tqdm import tqdm
 
 # original hm-vae
 # amass_splits = {
@@ -51,15 +52,25 @@ def gen_all_json(train_json, val_json, test_json, npy_folder):
     val_cnt = 0
     test_cnt = 0
 
-    for f_name in npy_files:
+    for f_name in tqdm(npy_files, ncols=100):
+        frame_num = np.load(os.path.join(npy_folder, f_name)).shape[0]
         if get_vname(f_name) in amass_splits['train']:
-            train_dict[train_cnt] = f_name 
+            train_dict[train_cnt] = {
+                'file_name': f_name,
+                'frame_num': frame_num
+            } 
             train_cnt += 1 
         if get_vname(f_name) in amass_splits['vald']:
-            val_dict[val_cnt] = f_name 
+            val_dict[val_cnt] = {
+                'file_name': f_name,
+                'frame_num': frame_num
+            } 
             val_cnt += 1
         if get_vname(f_name) in amass_splits['test']:
-            test_dict[test_cnt] = f_name 
+            test_dict[test_cnt] = {
+                'file_name': f_name,
+                'frame_num': frame_num
+            } 
             test_cnt += 1
 
     print("Training sequences:{0}".format(train_cnt))
@@ -113,7 +124,7 @@ if __name__ == "__main__":
     # # gen_json(train_json, val_json, npy_folder)
     # # train cnt: 18, val cnt: 4
 
-    data_folder = "data/for_all_data_motion_model"
+    data_folder = "data/for_all_data_motion_model/train_val_test_json_fps30"
     if not os.path.exists(data_folder):
         os.makedirs(data_folder)
     train_json = os.path.join(data_folder, "train_all_amass_motion_data.json")

@@ -1,6 +1,6 @@
 # experiment options
 output_dir: outputs/train
-exp_name: len_16_k_5_no_aug_mae
+exp_name: len_16_k_3_no_aug_mae
 
 # logger options
 max_iter: 500000              # maximum number of training iterations
@@ -29,14 +29,15 @@ rec_root_v_w: 0
 # kl_w: 0.003
 
 # dataloader
-train_batch_size: 512
+train_batch_size: 256
 val_batch_size: 128
 test_batch_size: 1
 num_workers: 4
 
 # model options
 train_seq_len: 16
-kernel_size: 5
+overlap: 0.7
+kernel_size: 3
 latent_d: 24
 n_joints: 24    
 num_layers: 4          
@@ -47,14 +48,15 @@ padding_mode: reflection
 upsampling: linear
 
 # dataset options
-fps_aug_flag: False
-random_root_rot_flag: False
-use_30fps_data: True
-rot_npy_folder_30fps: /data/jsy/datasets/AMASS/amass_for_hm_vae_fps30
-rot_npy_folder_all: /data/jsy/datasets/AMASS/amass_for_hm_vae_all
-train_json_file: data/for_all_data_motion_model/train_all_amass_motion_data.json
-val_json_file: data/for_all_data_motion_model/val_all_amass_motion_data.json
-test_json_file: data/for_all_data_motion_model/test_all_amass_motion_data.json
+db_dir: /data/jsy/datasets/AMASS/db_lib
+# fps_aug_flag: False
+# random_root_rot_flag: False
+# use_30fps_data: True
+# rot_npy_folder_30fps: /data/jsy/datasets/AMASS/amass_for_hm_vae_fps30
+# rot_npy_folder_all: /data/jsy/datasets/AMASS/amass_for_hm_vae_all
+# train_json_file: data/for_all_data_motion_model/train_val_test_json_fps30/train_all_amass_motion_data.json
+# val_json_file: data/for_all_data_motion_model/train_val_test_json_fps30/val_all_amass_motion_data.json
+# test_json_file: data/for_all_data_motion_model/train_val_test_json_fps30/test_all_amass_motion_data.json
 mean_std_path: data/for_all_data_motion_model/all_amass_data_mean_std.npy
 
 parent_json_file: utils/data/joint24_parents.json

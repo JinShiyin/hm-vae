@@ -1,6 +1,7 @@
 import torch
 import torch.utils.data as data
 from torch.utils.data import DataLoader
+from skimage.util.shape import view_as_windows
 
 import torchgeometry as tgm
 
@@ -80,17 +81,35 @@ def change_fps(ori_data, train_seq_len):
 
     return res 
 
+
+def split_into_chunks(json_file, seq_len, stride):
+    start_end_info_list = []
+    npy_info = json.load(open(json_file, 'r'))
+    for key, val in npy_info.items():
+        npy_file_name = val['file_name']
+        frame_num = val['frame_num']
+        if frame_num < seq_len:
+            continue
+        index_list = np.arange(frame_num)
+        chunks = view_as_windows(index_list, (seq_len,), stride)
+        for i in range(chunks.shape[0]):
+            start_end_info_list.append({
+                'file_name': npy_file_name,
+                'start_idx': chunks[i][0],
+                'end_idx': chunks[i][-1]
+            })
+    return start_end_info_list
+
 class MotionSeqData(data.Dataset):
 
-    def __init__(self, rot_npy_folder, jsonfile, mean_std_path, cfg, test_flag=False, fps_aug_flag=False, random_root_rot_flag=False):
-
-        self.ids_dic = json.load(open(jsonfile, 'r'))
-
-        id_list = []
-        for k in self.ids_dic.keys():
-            id_list.append(int(k))
-           
-        self.ids = id_list
+    def __init__(self, rot_npy_folder, jsonfile, mean_std_path, cfg, test_flag=False, fps_aug_flag=False, random_root_rot_flag=False, logger=None):
+        
+        self.seq_len = cfg['train_seq_len']
+        self.overlap = cfg['overlap']
+        self.start_end_info_list = split_into_chunks(jsonfile, seq_len=self.seq_len, stride=int((1-self.overlap)*self.seq_len))
+        if logger is not None:
+            logger.info(f'len of dataset: {len(self.start_end_info_list)}')
+        random.shuffle(self.start_end_info_list)
 
         self.rot_npy_folder = rot_npy_folder
 
@@ -122,32 +141,39 @@ class MotionSeqData(data.Dataset):
         return dest_data
 
     def __getitem__(self, index):
-        # index = 0 # For debug
-        v_name = self.ids_dic[str(index)]      
-        rot_npy_path = os.path.join(self.rot_npy_folder, v_name)
-        ori_pose_seq_data = np.load(rot_npy_path) # T X n_dim
+        # # index = 0 # For debug
+        # v_name = self.ids_dic[str(index)]      
+        # rot_npy_path = os.path.join(self.rot_npy_folder, v_name)
+        # ori_pose_seq_data = np.load(rot_npy_path) # T X n_dim
 
-        if self.fps_aug_flag:
-            ori_pose_seq_data = change_fps(ori_pose_seq_data, self.train_seq_len) # T' X n_dim
+        # if self.fps_aug_flag:
+        #     ori_pose_seq_data = change_fps(ori_pose_seq_data, self.train_seq_len) # T' X n_dim
 
-        timesteps = ori_pose_seq_data.shape[0]
-        n_dim = ori_pose_seq_data.shape[1]
+        # timesteps = ori_pose_seq_data.shape[0]
+        # n_dim = ori_pose_seq_data.shape[1]
        
-        if self.train_seq_len <= timesteps:
-            random_t_idx = random.sample(list(range(timesteps-self.train_seq_len+1)), 1)[0]
-            # random_t_idx = 0 # For debug
-            end_t_idx = random_t_idx + self.train_seq_len - 1
-        else:
-            return self.__getitem__(random.sample(list(range(0, self.__len__())), 1)[0])
+        # if self.train_seq_len <= timesteps:
+        #     random_t_idx = random.sample(list(range(timesteps-self.train_seq_len+1)), 1)[0]
+        #     # random_t_idx = 0 # For debug
+        #     end_t_idx = random_t_idx + self.train_seq_len - 1
+        # else:
+        #     return self.__getitem__(random.sample(list(range(0, self.__len__())), 1)[0])
            
-        pose_seq_data = self.standardize_data(ori_pose_seq_data)
+        # pose_seq_data = self.standardize_data(ori_pose_seq_data)
 
-        # theta = torch.cat((rot6d_list.view(timesteps, -1), rot_list.view(timesteps, -1), coord_list.view(timesteps, -1), \
-        #         linear_v.view(timesteps, -1), linear_v_list.view(timesteps, -1), root_v), dim=1) # T X n_dim
-        # n_dim = 24*6(rot6d) + 24*3*3(rot matrix) + 24*3(joint coord) + 24*3(linear v) + 24*3(linear v instead, not used, angular v) + 3
-        # = 144 + 216 + 72 + 72 + 72 + 3 = 579
-        ori_seq_pose_data = torch.from_numpy(ori_pose_seq_data[random_t_idx:end_t_idx+1, :]).float() # T X n_dim
-        seq_pose_data = torch.from_numpy(pose_seq_data[random_t_idx:end_t_idx+1, :]).float() # T X n_dim
+        # # theta = torch.cat((rot6d_list.view(timesteps, -1), rot_list.view(timesteps, -1), coord_list.view(timesteps, -1), \
+        # #         linear_v.view(timesteps, -1), linear_v_list.view(timesteps, -1), root_v), dim=1) # T X n_dim
+        # # n_dim = 24*6(rot6d) + 24*3*3(rot matrix) + 24*3(joint coord) + 24*3(linear v) + 24*3(linear v instead, not used, angular v) + 3
+        # # = 144 + 216 + 72 + 72 + 72 + 3 = 579
+        # ori_seq_pose_data = torch.from_numpy(ori_pose_seq_data[random_t_idx:end_t_idx+1, :]).float() # T X n_dim
+        # seq_pose_data = torch.from_numpy(pose_seq_data[random_t_idx:end_t_idx+1, :]).float() # T X n_dim
+
+        seq_info = self.start_end_info_list[index]
+        npy_file_name, start_idx, end_idx = seq_info['file_name'], seq_info['start_idx'], seq_info['end_idx']
+        ori_seq_pose_data = np.load(os.path.join(self.rot_npy_folder, npy_file_name))[start_idx:end_idx+1] # seq_len * 579
+        seq_pose_data = self.standardize_data(ori_seq_pose_data)
+        ori_seq_pose_data = torch.from_numpy(ori_seq_pose_data).float()
+        seq_pose_data = torch.from_numpy(seq_pose_data).float()
 
         seq_rot_6d = ori_seq_pose_data[:, :24*6] # T X (24*6)
         seq_rot_mat = ori_seq_pose_data[:, 24*6:24*6+24*3*3] # T X (24*3*3), used for loss, no need for normalization
@@ -188,9 +214,9 @@ class MotionSeqData(data.Dataset):
         # When data_aug is True, only use seq_rot_6d, seq_rot_mat  
 
     def __len__(self):
-        return len(self.ids)
+        return len(self.start_end_info_list)
 
-def get_train_loaders_all_data_seq(cfg):
+def get_train_loaders_all_data_seq(cfg, logger):
 
     if cfg['use_30fps_data']:
         rot_npy_folder = cfg['rot_npy_folder_30fps']
@@ -208,19 +234,19 @@ def get_train_loaders_all_data_seq(cfg):
     random_root_rot_flag = cfg['random_root_rot_flag']
 
     train_dataset = MotionSeqData(rot_npy_folder, train_json_file, mean_std_path, cfg, \
-        fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
+        fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag, logger=logger)
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=cfg['train_batch_size'], shuffle=True,
         num_workers=workers, pin_memory=True, drop_last=True)
 
     val_dataset = MotionSeqData(rot_npy_folder, val_json_file, mean_std_path, cfg, \
-        fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
+        fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag, logger=logger)
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=cfg['val_batch_size'], shuffle=False,
         num_workers=1, pin_memory=True, drop_last=True)
 
     test_dataset = MotionSeqData(rot_npy_folder, test_json_file, mean_std_path, cfg, \
-        fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag)
+        fps_aug_flag=fps_aug_flag, random_root_rot_flag=random_root_rot_flag, logger=logger)
     test_loader = torch.utils.data.DataLoader(
         test_dataset, batch_size=cfg['test_batch_size'], shuffle=True,
         num_workers=1, pin_memory=True, drop_last=True)

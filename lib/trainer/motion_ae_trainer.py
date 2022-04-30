@@ -13,7 +13,7 @@ import torchgeometry as tgm
 from lib.models.motion_ae import MotionAE
 from lib.models.fk_layer import ForwardKinematicsLayer
 from lib.utils.common_utils import get_model_list, get_scheduler, weights_init
-from lib.utils.conversion_utils import amass_pose_to_smpl_pose, smpl_pose_to_amass_pose
+from lib.utils.conversion_utils import amass_pose_to_smpl_pose, convert_to_input, smpl_pose_to_amass_pose
 from lib.utils.rotation_utils import hmvae_rot6d_to_rotmat, rotmat_to_rot6d
 
 
@@ -43,9 +43,7 @@ class MotionAETrainer(nn.Module):
         self.loss_rec_rot_6d = torch.zeros(1).cuda()
         self.loss_rec_rot_mat = torch.zeros(1).cuda()
         self.loss_rec_rot_pos = torch.zeros(1).cuda()
-        self.loss_rec_joint_pos = torch.zeros(1).cuda()
         self.loss_rec_linear_v = torch.zeros(1).cuda()
-        self.loss_rec_angular_v = torch.zeros(1).cuda()
         self.loss_rec_root_v = torch.zeros(1).cuda()
         self.loss_rec_total = torch.zeros(1).cuda()
     
@@ -67,15 +65,6 @@ class MotionAETrainer(nn.Module):
         rec_seq_rot_mat = rec_seq_rot_mat.contiguous().view(bs, timesteps, -1) # bs X T X (24*3*3)
         rec_seq_rot_pos = rec_seq_rot_pos.contiguous().view(bs, timesteps, -1) # bs X T X (24*3)
 
-        # normalize rec_seq_rot_pos to get rec_seq_joint_pos
-        start_idx = 24*6+24*3*3+24*3
-        rec_seq_joint_pos = self.standardize_data_specify_dim(
-            ori_data=rec_seq_rot_pos.view(-1, n_joints*3),
-            start_idx=start_idx,
-            end_idx=start_idx+24*3
-        )
-        rec_seq_joint_pos = rec_seq_joint_pos.view(bs, timesteps, -1)
-
         # diff rec_seq_rot_pos and normalize to cal linear_v
         minus_rec_seq_rot_pos = rec_seq_rot_pos[:, :-1, :] # bs X T-1 X (24*3)
         minus_rec_seq_rot_pos = torch.cat([rec_seq_rot_pos[:, [0], :], minus_rec_seq_rot_pos], dim=1) # bs X T X (24*3)
@@ -89,7 +78,7 @@ class MotionAETrainer(nn.Module):
         )
         rec_seq_linear_v = rec_seq_linear_v.view(bs, timesteps, -1)
 
-        return rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v
+        return rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_linear_v
         
     def l2_criterion(self, pred, gt):
         assert pred.size() == gt.size() # If the two have different dimensions, there would be weird issues!
@@ -112,19 +101,26 @@ class MotionAETrainer(nn.Module):
 
 
     def update(self, data):
+        '''
+        description: 
+        param {*} self
+        param {*} data: bs X T X 144, angle_axis(24*3), trans(24*3)
+        return {*}
+        '''
         self.opt.zero_grad()
-        seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_joint_pos, seq_linear_v, seq_angular_v, seq_root_v = data
+        seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_trans, seq_linear_v, seq_root_v = convert_to_input(
+            data=data,
+            fk_layer=self.fk_layer,
+            mean_std_data=self.mean_std_data
+        )
         
-        rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
+        rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
 
         # print(f'seq_joint_pos={seq_joint_pos}')
         # print(f'rec_seq_joint_pos={rec_seq_joint_pos}')
 
         # print(f'seq_linear_v={seq_linear_v}')
         # print(f'rec_seq_linear_v={rec_seq_linear_v}')
-
-        if self.cfg['rec_joint_pos_w'] != 0:
-            self.loss_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
 
         if self.cfg['rec_linear_v_w'] != 0:
             self.loss_rec_linear_v = self.l2_criterion(rec_seq_linear_v, seq_linear_v)
@@ -136,7 +132,6 @@ class MotionAETrainer(nn.Module):
         self.loss_rec_total = self.cfg['rec_rot_6d_w'] * self.loss_rec_rot_6d + \
                            self.cfg['rec_rot_mat_w'] * self.loss_rec_rot_mat + \
                            self.cfg['rec_rot_pos_w'] * self.loss_rec_rot_pos + \
-                           self.cfg['rec_joint_pos_w'] * self.loss_rec_joint_pos + \
                            self.cfg['rec_linear_v_w'] * self.loss_rec_linear_v
         self.loss_rec_total.backward()
         self.opt.step()
@@ -146,9 +141,7 @@ class MotionAETrainer(nn.Module):
             'loss_rec_rot_6d': self.loss_rec_rot_6d.item(),
             'loss_rec_rot_mat': self.loss_rec_rot_mat.item(),
             'loss_rec_rot_pos': self.loss_rec_rot_pos.item(),
-            'loss_rec_joint_pos': self.loss_rec_joint_pos.item(),
             'loss_rec_linear_v': self.loss_rec_linear_v.item(),
-            'loss_rec_angular_v': self.loss_rec_angular_v.item(),
             'loss_rec_root_v': self.loss_rec_root_v.item(),
         }
         return info_dict
@@ -156,12 +149,13 @@ class MotionAETrainer(nn.Module):
     def validate(self, data):
         self.eval()
         with torch.no_grad():
-            seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_joint_pos, seq_linear_v, seq_angular_v, seq_root_v = data
+            seq_rot_6d, seq_rot_mat, seq_rot_pos, seq_trans, seq_linear_v, seq_root_v = convert_to_input(
+                data=data,
+                fk_layer=self.fk_layer,
+                mean_std_data=self.mean_std_data
+            )
             
-            rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_joint_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
-
-            if self.cfg['rec_joint_pos_w'] != 0:
-                self.loss_rec_joint_pos = self.l2_criterion(rec_seq_joint_pos, seq_joint_pos)
+            rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, rec_seq_linear_v = self.forward(seq_rot_6d)
 
             if self.cfg['rec_linear_v_w'] != 0:
                 self.loss_rec_linear_v = self.l2_criterion(rec_seq_linear_v, seq_linear_v)
@@ -173,7 +167,6 @@ class MotionAETrainer(nn.Module):
             self.loss_rec_total = self.cfg['rec_rot_6d_w'] * self.loss_rec_rot_6d + \
                             self.cfg['rec_rot_mat_w'] * self.loss_rec_rot_mat + \
                             self.cfg['rec_rot_pos_w'] * self.loss_rec_rot_pos + \
-                            self.cfg['rec_joint_pos_w'] * self.loss_rec_joint_pos + \
                             self.cfg['rec_linear_v_w'] * self.loss_rec_linear_v
 
             info_dict = {
@@ -181,9 +174,7 @@ class MotionAETrainer(nn.Module):
                 'loss_rec_rot_6d': self.loss_rec_rot_6d.item(),
                 'loss_rec_rot_mat': self.loss_rec_rot_mat.item(),
                 'loss_rec_rot_pos': self.loss_rec_rot_pos.item(),
-                'loss_rec_joint_pos': self.loss_rec_joint_pos.item(),
                 'loss_rec_linear_v': self.loss_rec_linear_v.item(),
-                'loss_rec_angular_v': self.loss_rec_angular_v.item(),
                 'loss_rec_root_v': self.loss_rec_root_v.item(),
             }
         self.train()
@@ -198,7 +189,7 @@ class MotionAETrainer(nn.Module):
         '''
         self.eval()
         with torch.no_grad():
-            rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, _, _ = self.forward(seq_rot_6d)
+            rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos, _ = self.forward(seq_rot_6d)
         self.train()
         return rec_seq_rot_6d, rec_seq_rot_mat, rec_seq_rot_pos
     
