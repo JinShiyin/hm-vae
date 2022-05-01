@@ -50,19 +50,16 @@ class TrajectoryModel(nn.Module):
         encoder_map_input = encoder_map_input.transpose(2, 3).transpose(1, 2) # bs X T X k_edges X d
         pred_root_v = self.fc_mapping(encoder_map_input.view(bs, timesteps, -1)) # bs X T X 3
 
-        return pred_root_v
+        return pred_root_v # bs X T X 3
 
 
 class Encoder(nn.Module):
     def __init__(self, args, topology):
         super(Encoder, self).__init__()
         self.topologies = [topology]
-        # if args.rotation == 'euler_angle': self.channel_base = [3]
-        # elif args.rotation == 'quaternion': self.channel_base = [4]
-        if args['trajectory_input_joint_pos']:
-            self.channel_base = [3] # 6 + 3
-        else:
-            self.channel_base = [6] 
+
+        self.channel_base = [3] # according to the input data type to change
+
         self.channel_list = []
         self.edge_num = [len(topology)]
         self.pooling_list = []
