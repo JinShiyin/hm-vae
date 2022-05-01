@@ -104,7 +104,7 @@ class MotionAETrainer(nn.Module):
         '''
         description: 
         param {*} self
-        param {*} data: bs X T X 144, angle_axis(24*3), trans(24*3)
+        param {*} data: bs X T X 75(24*3+3), angle_axis(24*3), trans(3)
         return {*}
         '''
         self.opt.zero_grad()
