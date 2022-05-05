@@ -499,6 +499,113 @@ def show3Dpose_animation_with_mask(channels, mask, image_directory, iterations, 
     plt.cla()
     plt.close()
 
+
+def show3Dpose_animation_with_contact_label(channels, contact_label, use_joint12=False, use_amass=False, use_lafan=False, dest_vis_path=None):
+    # channels: K X T X n_joints X 3
+    fig = plt.figure(figsize=(9, 7))
+    ax = Axes3D(fig) 
+
+    lcolor = '#E76F51'
+    rcolor = '#F4A261'
+    gt_color = '#27AE60'
+    pred_color = '#E74C3C'
+    vals = channels # K X T X 24 X 3, K represents how many skeleton showing in same figure(K=2: show gt and generation)
+    num_cmp = vals.shape[0]
+    # contact_label: K X T X 24
+   
+    if use_joint12:
+        connections = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [6, 7], [7, 8], [8, 9], [9, 10], [10, 11]]
+    elif use_lafan:
+        connections = [[0, 1], [0, 5], [0, 9], [1, 2], [2, 3], [3, 4], [5, 6], [6, 7], [7, 8], [9, 10], [10, 11], [11, 12], [11, 14], 
+        [11, 18], [12, 13], [14, 15], [15, 16], [16, 17], [18, 19], [19, 20], [20, 21]]
+    else:
+        connections = [[0, 1], [0, 2], [0, 3], [1, 4], [2, 5], [3, 6], [4, 7], [5, 8], [6, 9], [7, 10], [8, 11], [9, 12], [9, 13], [9, 14],
+                    [12, 15], [13, 16], [14, 17], [16, 18], [17, 19], [18, 20], [19, 21], [20, 22], [21, 23]]
+
+    LR = np.array([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1], dtype=bool)
+
+    lines = []
+    dots = []
+    for cmp_idx in range(num_cmp):
+        cur_line = []
+        for ind, (i,j) in enumerate(connections):
+            if num_cmp == 2 and cmp_idx == 0:
+                cur_line.append(ax.plot([0, 0], [0, 0], [0, 0], lw=2, c=gt_color)[0])
+            elif num_cmp == 2 and cmp_idx == 1:
+                cur_line.append(ax.plot([0, 0], [0, 0], [0, 0], lw=2, c=pred_color)[0])
+            else:
+                cur_line.append(ax.plot([0, 0], [0, 0], [0, 0], lw=2, c=pred_color)[0])
+                # cur_line.append(ax.plot([0, 0], [0, 0], [0, 0], lw=2, c=lcolor if LR[ind] else rcolor)[0])
+        lines.append(cur_line)
+        
+    contact_point = ax.plot([], [], [], 'bo')[0]
+
+    # ax.scatter(vals[:, 0], vals[:, 1], vals[:, 2], marker='o')
+
+    def animate(i):
+        changed = []
+        for ai in range(len(vals)):
+            for ind, (p_idx, j_idx) in enumerate(connections):
+                lines[ai][ind].set_data([vals[ai][i, j_idx, 0], vals[ai][i, p_idx, 0]], [vals[ai][i, j_idx, 1], vals[ai][i, p_idx, 1]])
+                lines[ai][ind].set_3d_properties([vals[ai][i, j_idx, 2], vals[ai][i, p_idx, 2]])
+            changed += lines
+
+            x_list = []
+            y_list = []
+            z_list = []
+            for j in range(24):
+                if contact_label[ai][i][j] == 1:
+                    x_list.append(vals[ai, i, j, 0])
+                    y_list.append(vals[ai, i, j, 1])
+                    z_list.append(vals[ai, i, j, 2])
+                    print(f'i={i}, contact ground, j={j}, point={vals[ai, i, j, :]}')
+            contact_point.set_data(x_list, y_list)
+            contact_point.set_3d_properties(z_list)
+            # ax.scatter(vals[ai, i, :, 0], vals[ai, i, :, 1], vals[ai, i, :, 2], marker='o')
+        return changed
+
+    RADIUS = 2  # space around the subject
+    xroot, yroot, zroot = vals[0, 0, 0, 0], vals[0, 0, 0, 1], vals[0, 0, 0, 2]
+    # xroot, yroot, zroot = 0, 0, 0 # For debug
+    if use_joint12:
+        # ax.view_init(0, 120)
+        # ax.view_init(-90, -90)
+        # ax.view_init(-90, 90) # For 3dpw original data
+        ax.view_init(-90, -90)
+    else:
+        if use_amass:
+            ax.view_init(0, 120) # Used in training AMASS dataset
+        else:
+            # ax.view_init(-90, -90) # Used in vibe?
+            ax.view_init(-90, 90)
+        # ax.view_init(-90, -90)
+
+    # ax.view_init(0, 0)
+    ax.set_xlim3d([-RADIUS + xroot, RADIUS + xroot])
+    ax.set_zlim3d([-RADIUS + zroot, RADIUS + zroot])
+    ax.set_ylim3d([-RADIUS + yroot, RADIUS + yroot])
+
+    # ax.set_axis_off()
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+
+    ani = FuncAnimation(fig,                                            
+                        animate,                                        
+                        np.arange(len(vals[0])),                  
+                        interval=33.33)  
+
+    dest_gif_path = dest_vis_path 
+
+    ani.save(dest_gif_path,                       
+            writer="pillow",                                         
+            fps=10) 
+
+    # plt.draw()
+    # plt.savefig(dest_img_path)
+    plt.cla()
+    plt.close()
+
 class Timer:
     def __init__(self, msg):
         self.msg = msg

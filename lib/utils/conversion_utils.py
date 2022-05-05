@@ -100,7 +100,7 @@ def standardize_data_specify_dim(ori_data, mean_std_data, start_idx, end_idx):
 def convert_to_input(data, fk_layer, mean_std_data=None):
     '''
     description: 
-    param {torch.tensor} data: bs X T X 144
+    param {torch.tensor} data: bs X T X 75
     param {*} fk_layer
     param {torch.tensor} mean_std_data: 2 X 579, None->not normalize
     return {*}
@@ -138,6 +138,89 @@ def convert_to_input(data, fk_layer, mean_std_data=None):
 
     return rot_6d, rot_mat, rot_pos, trans, linear_v, root_v
 
+
+def get_foot_contact_label(rot_pos, trans):
+    '''
+    description: 
+    param {*} rot_pos: bs X T X (24*3)
+    param {*} trans: bs X T X 3
+    return {*} foot_contact_label: bs X T X 2
+    '''
+    bs, timesteps, _ = rot_pos.size()
+    rot_pos = rot_pos.view(bs, timesteps, 24, 3) # bs X T X 24 X 3
+    trans = trans.unsqueeze(2) # bs X T X 1 X 3
+    absolute_pos = rot_pos + trans # bs X T X 24 X 3
+    print(f'############### absolute pos ###############')
+    print(absolute_pos)
+    minus_absolute_pos = absolute_pos[:, 1:timesteps, :, :] # bs X T-1 X 24 X 3
+    minus_absolute_pos = torch.cat([absolute_pos[:, [0], :, :], minus_absolute_pos], dim=1) # bs X T X 24 X 3
+    pos_trans = absolute_pos - minus_absolute_pos # bs X T X 24 X 3
+    velocity = torch.sqrt(torch.sum(torch.pow(pos_trans, 2), dim=-1, keepdim=True)) # bs X T X 24 X 1
+    foot_velocity = velocity[:, :, [10, 11], 0] # bs X T X 2
+
+    absolute_foot_pos_z = absolute_pos[:, :, [10, 11], 2] # bs X T X 2
+    absolute_foot_pos_z = absolute_foot_pos_z.view(bs, -1) # bs X (T*2)
+    percentage = 0.2
+    values, indices = absolute_foot_pos_z.topk(int(percentage*timesteps*2), dim=-1, largest=True, sorted=True) # bs X (per*T*2)
+    ground_plane = torch.mean(values, dim=-1, keepdim=True) # bs X 1
+    absolute_foot_pos_z = absolute_foot_pos_z.view(bs, timesteps, 2) # bs X T X 2
+    ground_plane = ground_plane.view(bs, 1, 1)
+    foot_height = torch.abs(absolute_foot_pos_z - ground_plane) # bs X T X 2
+
+    foot_height_thresh = 0.02
+    foot_velocity_thresh = 0.001
+
+    device = rot_pos.device
+    zero = torch.zeros_like(foot_velocity).to(device)
+    one = torch.ones_like(foot_velocity).to(device)
+    foot_velocity = torch.where(foot_velocity<=foot_velocity_thresh, one, zero)
+    foot_height = torch.where(foot_height<=foot_height_thresh, one, zero)
+
+    foot_contact_label = foot_velocity * foot_height
+    return foot_contact_label
+
+
+def get_all_contact_label(rot_pos, trans, pos_height_thresh=0.02, velocity_thresh=0.001):
+    '''
+    description: 
+    param {*} rot_pos: bs X T X (24*3)
+    param {*} trans: bs X T X 3
+    param {*} pos_height_thresh: m, default 0.02
+    param {*} velocity_thresh: m, default 0.001
+    return {*} contact_label: bs X T X 24
+    '''
+    bs, timesteps, _ = rot_pos.size()
+    rot_pos = rot_pos.view(bs, timesteps, 24, 3) # bs X T X 24 X 3
+    trans = trans.unsqueeze(2) # bs X T X 1 X 3
+    absolute_pos = rot_pos + trans # bs X T X 24 X 3
+    minus_absolute_pos = absolute_pos[:, 1:timesteps, :, :] # bs X T-1 X 24 X 3
+    minus_absolute_pos = torch.cat([absolute_pos[:, [0], :, :], minus_absolute_pos], dim=1) # bs X T X 24 X 3
+    pos_trans = absolute_pos - minus_absolute_pos # bs X T X 24 X 3
+    velocity = torch.sqrt(torch.sum(torch.pow(pos_trans, 2), dim=-1)) # bs X T X 24
+
+    absolute_foot_pos_z = absolute_pos[:, :, [10, 11], 2] # bs X T X 2
+    absolute_foot_pos_z = absolute_foot_pos_z.view(bs, -1) # bs X (T*2)
+    # percentage = 0.2
+    # values, indices = absolute_foot_pos_z.topk(int(percentage*timesteps*2), dim=-1, largest=True, sorted=True) # bs X (per*T*2)
+    # ground_plane = torch.mean(values, dim=-1, keepdim=True) # bs X 1
+    ground_plane = torch.min(absolute_foot_pos_z, dim=-1, keepdim=True).values
+    print(f'ground_plane={ground_plane}')
+
+    absolute_pos_z = absolute_pos[:, :, :, 2].view(bs, timesteps, 24) # bs X T X 24
+    ground_plane = ground_plane.view(bs, 1, 1)
+    pos_height = torch.abs(absolute_pos_z - ground_plane) # bs X T X 2
+
+    # pos_height_thresh = 0.02
+    # velocity_thresh = 0.001
+
+    device = rot_pos.device
+    zero = torch.zeros_like(velocity).to(device)
+    one = torch.ones_like(velocity).to(device)
+    velocity = torch.where(velocity<=velocity_thresh, one, zero)
+    pos_height = torch.where(pos_height<=pos_height_thresh, one, zero)
+
+    contact_label = velocity * pos_height # bs X T X 24
+    return contact_label
 
 
 if __name__ == "__main__":
