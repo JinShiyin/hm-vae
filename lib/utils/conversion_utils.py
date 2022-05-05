@@ -204,7 +204,7 @@ def get_all_contact_label(rot_pos, trans, pos_height_thresh=0.02, velocity_thres
     # values, indices = absolute_foot_pos_z.topk(int(percentage*timesteps*2), dim=-1, largest=True, sorted=True) # bs X (per*T*2)
     # ground_plane = torch.mean(values, dim=-1, keepdim=True) # bs X 1
     ground_plane = torch.min(absolute_foot_pos_z, dim=-1, keepdim=True).values
-    print(f'ground_plane={ground_plane}')
+    # print(f'ground_plane={ground_plane}')
 
     absolute_pos_z = absolute_pos[:, :, :, 2].view(bs, timesteps, 24) # bs X T X 24
     ground_plane = ground_plane.view(bs, 1, 1)

@@ -15,8 +15,6 @@ class TrajectoryModel(nn.Module):
 
         self.latent_d = hp['latent_d']
         self.n_joints = hp['n_joints']
-        self.input_dim = hp['input_dim'] 
-        self.output_dim = hp['output_dim']
         self.max_timesteps = hp['train_seq_len']
 
         parent_json = "./utils/data/joint24_parents.json"
@@ -58,7 +56,8 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.topologies = [topology]
 
-        self.channel_base = [3] # according to the input data type to change
+        # self.channel_base = [3] # according to the input data type to change
+        self.channel_base = [args['encoder_channel_base']] # according to the input data type to change
 
         self.channel_list = []
         self.edge_num = [len(topology)]
