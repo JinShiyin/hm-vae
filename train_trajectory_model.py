@@ -69,6 +69,16 @@ if __name__ == '__main__':
     val_loader = data_loaders[1]
     test_loader = data_loaders[2]
 
+    debug = config['debug']
+    logger.info(f'debug: {debug}')
+    if debug:
+        config['validation_iter'] = 50
+        config['visualize_iter'] = 50
+        config['snapshot_save_iter'] = 50
+        config['pred_vibe_iter'] = 50
+        config['log_iter'] = 5
+        
+
     epoch = 0
     while True:
         epoch+=1
@@ -163,6 +173,8 @@ if __name__ == '__main__':
                     args=(config, absolute_rot_pos_dir, image_directory, iterations, 'absolute_gif', logger)
                 )
                 p.start()
+                if debug:
+                    time.sleep(600)
 
 
             if (iterations + 1) % config['log_iter'] == 0:

@@ -3,6 +3,7 @@ output_dir: outputs/train
 exp_name: len_64_k_15_trajectory
 
 # logger options
+debug: false
 max_iter: 1000000              # maximum number of training iterations
 validation_iter: 50000
 visualize_iter: 50000       # How often do you want to save output images during training
@@ -19,8 +20,10 @@ gamma: 0.3
 init: kaiming                 # initialization [gaussian/kaiming/xavier/orthogonal]
 
 # loss weight
-rec_root_v_w: 1000
+rec_root_v_w: 10000
 rec_absolute_rot_pos_w: 1
+rec_absolute_velocity: 1000
+rec_absolute_acceleration: 100000
 contact_w: 10000
 # kl_w: 0.003
 

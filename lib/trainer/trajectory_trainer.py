@@ -142,21 +142,35 @@ class TrajectoryModelTrainer(nn.Module):
             velocity_thresh=self.cfg['velocity_thresh']
         ) # bs X T X 24
         contact_label = contact_label.unsqueeze(-1) # bs X T X 24 X 1
-        input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*4)
-        
-        pred_root_v, absolute_pred_rot_pos = self.forward(input_data)
-        # bs X T X 3, bs X T X 24 X 3
+        # # cal relative gt velocity and acceleration for input
+        # seq_pos_velocity = self.get_velocity(seq_rot_pos.view(bs, timesteps, -1, 3)) # bs X T X 24 X 3
+        # seq_pos_acceleration = self.get_velocity(seq_pos_velocity) # bs X T X 24 X 3
+        # # pos + velocity + acceleration + contact
+        # input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), seq_pos_velocity, seq_pos_acceleration, contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*10)
+
+        input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*10)
+        # use model to get pred root v, then cal absolute pos for pred and gt
+        pred_root_v, pred_absolute_rot_pos = self.forward(input_data) # bs X T X 3, bs X T X 24 X 3
         absolute_rot_pos = self.relative_to_absolute_rot_pos(seq_rot_pos.view(bs, timesteps, 24, -1), seq_root_v) # bs X T X 24 X 3
 
-        pred_velocity = self.get_velocity(absolute_pred_rot_pos) # bs X T X 24 X 3
-        pred_velocity = contact_label * pred_velocity # bs X T X 24 X 3, set the no contact to zero
+        # cal gt absolute pos velocity for velocity loss
+        absolute_velocity = self.get_velocity(absolute_rot_pos) # bs X T X 24 X 3
+        pred_absolute_velocity = self.get_velocity(pred_absolute_rot_pos) # bs X T X 24 X 3
+        pred_absolute_velocity_contact = contact_label * pred_absolute_velocity # bs X T X 24 X 3, set the no contact to zero
+        # cal acceleration for gt and pred
+        absolute_acceleration = self.get_velocity(absolute_velocity) # bs X T X 24 X 3
+        pred_absolute_acceleration = self.get_velocity(pred_absolute_velocity) # bs X T X 24 X 3
         
         self.loss_rec_root_v = self.l2_criterion(pred_root_v, seq_root_v)
-        self.loss_rec_absolute_rot_pos = self.l2_criterion(absolute_pred_rot_pos, absolute_rot_pos)
-        self.loss_contact = (pred_velocity**2).mean()
+        self.loss_rec_absolute_rot_pos = self.l2_criterion(pred_absolute_rot_pos, absolute_rot_pos)
+        self.loss_rec_absolute_velocity = self.l2_criterion(pred_absolute_velocity, absolute_velocity)
+        self.loss_rec_absolute_acceleration = self.l2_criterion(pred_absolute_acceleration, absolute_acceleration)
+        self.loss_contact = (pred_absolute_velocity_contact**2).mean()
 
         self.loss_rec_total = self.cfg['rec_root_v_w'] * self.loss_rec_root_v + \
                               self.cfg['rec_absolute_rot_pos_w'] * self.loss_rec_absolute_rot_pos +\
+                              self.cfg['rec_absolute_velocity'] * self.loss_rec_absolute_velocity +\
+                              self.cfg['rec_absolute_acceleration'] * self.loss_rec_absolute_acceleration +\
                               self.cfg['contact_w'] * self.loss_contact
         self.loss_rec_total.backward()
         self.opt.step()
@@ -164,8 +178,10 @@ class TrajectoryModelTrainer(nn.Module):
         info_dict = {
             'loss_rec_total': self.loss_rec_total.item(),
             'loss_rec_root_v': self.loss_rec_root_v.item(),
-            'loss_contact': self.loss_contact.item(),
+            'loss_rec_absolute_velocity': self.loss_rec_absolute_velocity.item(),
+            'loss_rec_absolute_acceleration': self.loss_rec_absolute_acceleration.item(),
             'loss_rec_absolute_rot_pos': self.loss_rec_absolute_rot_pos.item(),
+            'loss_contact': self.loss_contact.item(),
         }
         return info_dict
     
@@ -193,28 +209,44 @@ class TrajectoryModelTrainer(nn.Module):
                 velocity_thresh=self.cfg['velocity_thresh']
             ) # bs X T X 24
             contact_label = contact_label.unsqueeze(-1) # bs X T X 24 X 1
-            input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*4)
-            
-            pred_root_v, absolute_pred_rot_pos = self.forward(input_data)
-            # bs X T X 3, bs X T X 24 X 3
+            # # cal relative gt velocity and acceleration for input
+            # seq_pos_velocity = self.get_velocity(seq_rot_pos.view(bs, timesteps, -1, 3)) # bs X T X 24 X 3
+            # seq_pos_acceleration = self.get_velocity(seq_pos_velocity) # bs X T X 24 X 3
+            # # pos + velocity + acceleration + contact
+            # input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), seq_pos_velocity, seq_pos_acceleration, contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*10)
+
+            input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*10)
+            # use model to get pred root v, then cal absolute pos for pred and gt
+            pred_root_v, pred_absolute_rot_pos = self.forward(input_data) # bs X T X 3, bs X T X 24 X 3
             absolute_rot_pos = self.relative_to_absolute_rot_pos(seq_rot_pos.view(bs, timesteps, 24, -1), seq_root_v) # bs X T X 24 X 3
 
-            pred_velocity = self.get_velocity(absolute_pred_rot_pos) # bs X T X 24 X 3
-            pred_velocity = contact_label * pred_velocity # bs X T X 24 X 3, set the no contact to zero
+            # cal gt absolute pos velocity for velocity loss
+            absolute_velocity = self.get_velocity(absolute_rot_pos) # bs X T X 24 X 3
+            pred_absolute_velocity = self.get_velocity(pred_absolute_rot_pos) # bs X T X 24 X 3
+            pred_absolute_velocity_contact = contact_label * pred_absolute_velocity # bs X T X 24 X 3, set the no contact to zero
+            # cal acceleration for gt and pred
+            absolute_acceleration = self.get_velocity(absolute_velocity) # bs X T X 24 X 3
+            pred_absolute_acceleration = self.get_velocity(pred_absolute_velocity) # bs X T X 24 X 3
             
             self.loss_rec_root_v = self.l2_criterion(pred_root_v, seq_root_v)
-            self.loss_rec_absolute_rot_pos = self.l2_criterion(absolute_pred_rot_pos, absolute_rot_pos)
-            self.loss_contact = (pred_velocity**2).mean()
+            self.loss_rec_absolute_rot_pos = self.l2_criterion(pred_absolute_rot_pos, absolute_rot_pos)
+            self.loss_rec_absolute_velocity = self.l2_criterion(pred_absolute_velocity, absolute_velocity)
+            self.loss_rec_absolute_acceleration = self.l2_criterion(pred_absolute_acceleration, absolute_acceleration)
+            self.loss_contact = (pred_absolute_velocity_contact**2).mean()
 
             self.loss_rec_total = self.cfg['rec_root_v_w'] * self.loss_rec_root_v + \
                                 self.cfg['rec_absolute_rot_pos_w'] * self.loss_rec_absolute_rot_pos +\
+                                self.cfg['rec_absolute_velocity'] * self.loss_rec_absolute_velocity +\
+                                self.cfg['rec_absolute_acceleration'] * self.loss_rec_absolute_acceleration +\
                                 self.cfg['contact_w'] * self.loss_contact
 
             info_dict = {
                 'loss_rec_total': self.loss_rec_total.item(),
                 'loss_rec_root_v': self.loss_rec_root_v.item(),
-                'loss_contact': self.loss_contact.item(),
+                'loss_rec_absolute_velocity': self.loss_rec_absolute_velocity.item(),
+                'loss_rec_absolute_acceleration': self.loss_rec_absolute_acceleration.item(),
                 'loss_rec_absolute_rot_pos': self.loss_rec_absolute_rot_pos.item(),
+                'loss_contact': self.loss_contact.item(),
             }
             return info_dict
     
@@ -242,8 +274,14 @@ class TrajectoryModelTrainer(nn.Module):
                 velocity_thresh=self.cfg['velocity_thresh']
             ) # bs X T X 24
             contact_label = contact_label.unsqueeze(-1) # bs X T X 24 X 1
-            input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*4)
-            
+            # # cal relative gt velocity and acceleration for input
+            # seq_pos_velocity = self.get_velocity(seq_rot_pos.view(bs, timesteps, -1, 3)) # bs X T X 24 X 3
+            # seq_pos_acceleration = self.get_velocity(seq_pos_velocity) # bs X T X 24 X 3
+            # # pos + velocity + acceleration + contact
+            # input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), seq_pos_velocity, seq_pos_acceleration, contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*10)
+
+            input_data = torch.cat([seq_rot_pos.view(bs, timesteps, -1, 3), contact_label], dim=-1).contiguous().view(bs, timesteps, -1) # bs X T X (24*10)
+            # use model to get pred root v, then cal absolute pos for pred and gt
             pred_root_v, absolute_pred_rot_pos = self.forward(input_data)
             # bs X T X 3, bs X T X 24 X 3
             absolute_rot_pos = self.relative_to_absolute_rot_pos(seq_rot_pos.view(bs, timesteps, 24, -1), seq_root_v) # bs X T X 24 X 3
@@ -278,6 +316,9 @@ class TrajectoryModelTrainer(nn.Module):
             seq_rot_pos = self.fk_layer(seq_rot_mat) # T X 24 X 3
             timesteps, _, _ = seq_rot_pos.size()
 
+            velocity = self.get_velocity(seq_rot_pos.unsqueeze(0)).squeeze(0) # T X 24 X 3
+            acceleration = self.get_velocity(velocity.unsqueeze(0)).squeeze(0) # T X 24 X 3
+
             zeros = torch.zeros(timesteps, 24, 1).cuda()
 
             trans = torch.zeros(timesteps, 3).cuda() # absolute trans
@@ -287,7 +328,9 @@ class TrajectoryModelTrainer(nn.Module):
             center_frame_end_idx = window_size // 2 - 1
             for t_idx in range(0, timesteps-window_size+1, 1):
                 # pred_root_v = self.model(seq_rot_pos[t_idx:t_idx+window_size, :, :].unsqueeze(0).contiguous().view(1, window_size, -1)) # 1 X window_size X 3
-
+                # input_data = torch.cat([seq_rot_pos[t_idx:t_idx+window_size, :, :], velocity[t_idx:t_idx+window_size, :, :], 
+                # acceleration[t_idx:t_idx+window_size, :, :], zeros[t_idx:t_idx+window_size, :, :]], dim=-1)
+                
                 input_data = torch.cat([seq_rot_pos[t_idx:t_idx+window_size, :, :], zeros[t_idx:t_idx+window_size, :, :]], dim=-1)
                 input_data = input_data.unsqueeze(0).contiguous().view(1, window_size, -1) # 1 X window_size X 4
                 pred_root_v = self.model(input_data)
