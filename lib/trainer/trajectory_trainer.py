@@ -322,34 +322,51 @@ class TrajectoryModelTrainer(nn.Module):
             zeros = torch.zeros(timesteps, 24, 1).cuda()
 
             trans = torch.zeros(timesteps, 3).cuda() # absolute trans
+
             # Process sequence with our model in sliding window fashion, use the centering frame strategy
-            window_size = self.cfg['train_seq_len'] # 64
-            center_frame_start_idx = window_size // 2 - 1
-            center_frame_end_idx = window_size // 2 - 1
-            for t_idx in range(0, timesteps-window_size+1, 1):
-                # pred_root_v = self.model(seq_rot_pos[t_idx:t_idx+window_size, :, :].unsqueeze(0).contiguous().view(1, window_size, -1)) # 1 X window_size X 3
-                # input_data = torch.cat([seq_rot_pos[t_idx:t_idx+window_size, :, :], velocity[t_idx:t_idx+window_size, :, :], 
-                # acceleration[t_idx:t_idx+window_size, :, :], zeros[t_idx:t_idx+window_size, :, :]], dim=-1)
+            # window_size = self.cfg['train_seq_len'] # 64
+            # center_frame_start_idx = window_size // 2 - 1
+            # center_frame_end_idx = window_size // 2 - 1
+            # for t_idx in range(0, timesteps-window_size+1, 1):
+            #     # pred_root_v = self.model(seq_rot_pos[t_idx:t_idx+window_size, :, :].unsqueeze(0).contiguous().view(1, window_size, -1)) # 1 X window_size X 3
+            #     # input_data = torch.cat([seq_rot_pos[t_idx:t_idx+window_size, :, :], velocity[t_idx:t_idx+window_size, :, :], 
+            #     # acceleration[t_idx:t_idx+window_size, :, :], zeros[t_idx:t_idx+window_size, :, :]], dim=-1)
                 
-                input_data = torch.cat([seq_rot_pos[t_idx:t_idx+window_size, :, :], zeros[t_idx:t_idx+window_size, :, :]], dim=-1)
+            #     input_data = torch.cat([seq_rot_pos[t_idx:t_idx+window_size, :, :], zeros[t_idx:t_idx+window_size, :, :]], dim=-1)
+            #     input_data = input_data.unsqueeze(0).contiguous().view(1, window_size, -1) # 1 X window_size X 4
+            #     pred_root_v = self.model(input_data)
+
+            #     if t_idx == 0:
+            #         start_pos = trans[t_idx]
+            #         absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
+            #         # The beginning part, we take all the frames before center
+            #         trans[:center_frame_end_idx+1, :] = absolute_trans[:center_frame_end_idx+1, :] 
+            #     elif t_idx == timesteps-window_size:
+            #         start_pos = trans[t_idx]
+            #         # Handle the last window in the end, take all the frames after center_start to make the videl length same as input
+            #         absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
+            #         trans[t_idx+center_frame_start_idx:, :] = absolute_trans[center_frame_start_idx:, :]
+            #     else:
+            #         start_pos = trans[t_idx]
+            #         absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
+            #         trans[t_idx+center_frame_end_idx, :] = absolute_trans[center_frame_end_idx, :]
+
+            # Process sequence with our model in sliding window fashion, using window size stride
+            window_size = self.cfg['train_seq_len'] # 64
+            for t_idx in range(0, timesteps, window_size-1):
+                end_idx = t_idx + window_size
+                if end_idx <= timesteps-1:
+                    start_idx = t_idx 
+                else:
+                    end_idx = timesteps-1
+                    start_idx = end_idx - window_size
+                input_data = torch.cat([seq_rot_pos[start_idx:end_idx, :, :], zeros[start_idx:end_idx, :, :]], dim=-1)
                 input_data = input_data.unsqueeze(0).contiguous().view(1, window_size, -1) # 1 X window_size X 4
                 pred_root_v = self.model(input_data)
+                start_pos = trans[start_idx]
+                absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
+                trans[start_idx:end_idx, :] = absolute_trans
 
-                if t_idx == 0:
-                    start_pos = trans[t_idx]
-                    absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
-                    # The beginning part, we take all the frames before center
-                    trans[:center_frame_end_idx+1, :] = absolute_trans[:center_frame_end_idx+1, :] 
-                elif t_idx == timesteps-window_size:
-                    start_pos = trans[t_idx]
-                    # Handle the last window in the end, take all the frames after center_start to make the videl length same as input
-                    absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
-                    trans[t_idx+center_frame_start_idx:, :] = absolute_trans[center_frame_start_idx:, :]
-                else:
-                    start_pos = trans[t_idx]
-                    absolute_trans = self.get_absolute_trans(start_pos, pred_root_v.squeeze(0)) # window_size X 3
-                    trans[t_idx+center_frame_end_idx, :] = absolute_trans[center_frame_end_idx, :]
-            
             absolute_rot_pos = seq_rot_pos + trans.unsqueeze(1) # T X 24 X 3            
         
         self.train()
