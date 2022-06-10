@@ -1,6 +1,6 @@
 # experiment options
 output_dir: outputs/train
-exp_name: len_16_k_3_no_aug_mae
+exp_name: len_8_k_3_no_aug_mae
 
 # logger options
 max_iter: 500000              # maximum number of training iterations
@@ -29,13 +29,13 @@ rec_root_v_w: 0
 # kl_w: 0.003
 
 # dataloader
-train_batch_size: 256
+train_batch_size: 512
 val_batch_size: 128
 test_batch_size: 1
 num_workers: 4
 
 # model options
-train_seq_len: 16
+train_seq_len: 8
 overlap: 0.7
 kernel_size: 3
 latent_d: 24

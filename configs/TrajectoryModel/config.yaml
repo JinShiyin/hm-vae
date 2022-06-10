@@ -21,6 +21,7 @@ init: kaiming                 # initialization [gaussian/kaiming/xavier/orthogon
 
 # loss weight
 rec_root_v_w: 100000
+rec_absolute_rot_pos_w: 1000
 rec_absolute_velocity: 10000
 rec_absolute_acceleration: 100000
 contact_w: 10000
